@@ -4,4 +4,11 @@
     <string name="menu_settings">General Setting</string>
     <string name="menu_about">About App</string>
     <string name="no_dsla_hint">No DSLA created yet</string>
+    <string name="dsla_name_label">Name</string>
+    <string name="dsla_name_hint">e.g. Fitness, Study, Work</string>
+    <string name="dsla_time_toggle_label">Time based</string>
+    <string name="dsla_save">Save</string>
+    <string name="dsla_cancel">Cancel</string>
+    <string name="dsla_name_required">Name cannot be empty</string>
+    <string name="dsla_opened_placeholder">%1$s opened — sections coming in the next build</string>
 </resources>
