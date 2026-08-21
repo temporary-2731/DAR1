@@ -28,21 +28,26 @@
         android:textStyle="bold"
         android:textColor="#000000" />
 
-    <FrameLayout
-        android:id="@+id/dsla_container"
+    <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_below="@id/title_dar"
         android:layout_marginTop="40dp">
 
-        <Button
-            android:id="@+id/btn_add_dsla"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:id="@+id/dsla_list_container"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:text="+"
-            android:textSize="28sp" />
+            android:orientation="vertical" />
 
-    </FrameLayout>
+    </ScrollView>
+
+    <Button
+        android:id="@+id/btn_add_dsla"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:text="+"
+        android:textSize="28sp" />
 
 </RelativeLayout>
