@@ -46,13 +46,6 @@ class MainActivity : AppCompatActivity() {
     private fun renderDslaList(dslaList: List<Dsla>) {
         binding.dslaListContainer.removeAllViews()
 
-        if (dslaList.isEmpty()) {
-            binding.btnAddDsla.visibility = View.VISIBLE
-            return
-        }
-
-        binding.btnAddDsla.visibility = View.GONE
-
         for (dsla in dslaList) {
             val itemView = LayoutInflater.from(this)
                 .inflate(R.layout.item_dsla, binding.dslaListContainer, false) as TextView
