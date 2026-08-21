@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">DAR</string>
+    <string name="menu_alarm">Alarm</string>
+    <string name="menu_settings">General Setting</string>
+    <string name="menu_about">About App</string>
+    <string name="no_dsla_hint">No DSLA created yet</string>
+</resources>
