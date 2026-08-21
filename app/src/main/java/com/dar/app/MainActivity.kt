@@ -50,13 +50,13 @@ class MainActivity : AppCompatActivity() {
             val itemView = LayoutInflater.from(this)
                 .inflate(R.layout.item_dsla, binding.dslaListContainer, false) as TextView
             itemView.text = dsla.name
-            itemView.setOnClickListener {
-                Toast.makeText(
-                    this,
-                    getString(R.string.dsla_opened_placeholder, dsla.name),
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
+           itemView.setOnClickListener {
+                val intent = Intent(this, DslaDetailActivity::class.java).apply {
+                    putExtra(DslaDetailActivity.EXTRA_DSLA_ID, dsla.id)
+                    putExtra(DslaDetailActivity.EXTRA_DSLA_NAME, dsla.name)
+                }
+                startActivity(intent)
+            } 
             binding.dslaListContainer.addView(itemView)
         }
     }
