@@ -50,4 +50,10 @@
     <string name="super_action_min_generals_required">Select at least 2 General Actions</string>
     <string name="super_action_no_generals_available">You need at least 2 General Actions in the General Action tab first</string>
     <string name="super_action_not_mutually_exclusive">Selected General Actions must not share any Action in common</string>
+    <string name="detail_close">Close</string>
+    <string name="detail_no_description">No description</string>
+    <string name="detail_none">None</string>
+    <string name="action_detail_format">ID: %1$d\nName: %2$s\nDescription: %3$s</string>
+    <string name="general_action_detail_format">ID: %1$d\nName: %2$s\nDescription: %3$s\n\nActions: %4$s</string>
+    <string name="super_action_detail_format">ID: %1$d\nName: %2$s\nDescription: %3$s\n\nGeneral Actions: %4$s\n\nActions: %5$s</string>
 </resources>
