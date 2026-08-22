@@ -12,9 +12,10 @@ import androidx.room.RoomDatabase
         GeneralActionEntity::class,
         GeneralActionActionCrossRef::class,
         SuperActionEntity::class,
-        SuperActionGeneralCrossRef::class
+        SuperActionGeneralCrossRef::class,
+        RecordingRow::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -23,6 +24,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun actionDao(): ActionDao
     abstract fun generalActionDao(): GeneralActionDao
     abstract fun superActionDao(): SuperActionDao
+    abstract fun recordingDao(): RecordingDao
 
     companion object {
         @Volatile
