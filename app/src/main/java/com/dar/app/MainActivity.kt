@@ -1,10 +1,10 @@
 package com.dar.app
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.EditText
-import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.Switch
 import android.widget.TextView
@@ -50,13 +50,13 @@ class MainActivity : AppCompatActivity() {
             val itemView = LayoutInflater.from(this)
                 .inflate(R.layout.item_dsla, binding.dslaListContainer, false) as TextView
             itemView.text = dsla.name
-           itemView.setOnClickListener {
+            itemView.setOnClickListener {
                 val intent = Intent(this, DslaDetailActivity::class.java).apply {
                     putExtra(DslaDetailActivity.EXTRA_DSLA_ID, dsla.id)
                     putExtra(DslaDetailActivity.EXTRA_DSLA_NAME, dsla.name)
                 }
                 startActivity(intent)
-            } 
+            }
             binding.dslaListContainer.addView(itemView)
         }
     }
