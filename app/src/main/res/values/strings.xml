@@ -30,6 +30,9 @@
     <string name="general_action_add">+ Add General Action</string>
     <string name="general_action_save">Save</string>
     <string name="general_action_cancel">Cancel</string>
+    <string name="general_action_name_label">Name</string>
+    <string name="general_action_name_hint">e.g. Morning Routine</string>
+    <string name="general_action_name_required">Name cannot be empty</string>
     <string name="general_action_description_label">Description</string>
     <string name="general_action_description_hint">Optional short description</string>
     <string name="general_action_select_actions_label">Select 2 or more Actions</string>
@@ -38,9 +41,13 @@
     <string name="super_action_add">+ Add Super Action</string>
     <string name="super_action_save">Save</string>
     <string name="super_action_cancel">Cancel</string>
+    <string name="super_action_name_label">Name</string>
+    <string name="super_action_name_hint">e.g. Daily Life</string>
+    <string name="super_action_name_required">Name cannot be empty</string>
     <string name="super_action_description_label">Description</string>
     <string name="super_action_description_hint">Optional short description</string>
     <string name="super_action_select_generals_label">Select 2 or more General Actions</string>
     <string name="super_action_min_generals_required">Select at least 2 General Actions</string>
     <string name="super_action_no_generals_available">You need at least 2 General Actions in the General Action tab first</string>
+    <string name="super_action_not_mutually_exclusive">Selected General Actions must not share any Action in common</string>
 </resources>
