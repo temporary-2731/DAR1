@@ -4,10 +4,28 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.CheckBox
+import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
+import com.dar.app.data.ActionEntity
+import com.dar.app.data.AppDatabase
+import com.dar.app.data.GeneralActionActionCrossRef
+import com.dar.app.data.GeneralActionEntity
+import com.dar.app.databinding.FragmentGeneralActionListBinding
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 class GeneralActionListFragment : Fragment() {
+
+    private var _binding: FragmentGeneralActionListBinding? = null
+    private val binding get() = _binding!!
+    private lateinit var db: AppDatabase
+    private var dslaId: Long = -1L
 
     companion object {
         private const val ARG_DSLA_ID = "arg_dsla_id"
@@ -26,11 +44,119 @@ class GeneralActionListFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        val textView = TextView(requireContext())
-        textView.text = getString(R.string.general_action_coming_soon)
-        textView.textSize = 18f
-        textView.setTextColor(android.graphics.Color.BLACK)
-        textView.setPadding(32, 64, 32, 32)
-        return textView
+        _binding = FragmentGeneralActionListBinding.inflate(inflater, container, false)
+        return binding.root
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        dslaId = arguments?.getLong(ARG_DSLA_ID) ?: -1L
+        db = AppDatabase.getInstance(requireContext().applicationContext)
+
+        binding.btnAddGeneralAction.setOnClickListener { showCreateGeneralActionDialog() }
+
+        observeGeneralActions()
+    }
+
+    private fun observeGeneralActions() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            db.generalActionDao().getAllForDsla(dslaId).collect { generalActions ->
+                renderGeneralActionList(generalActions)
+            }
+        }
+    }
+
+    private fun renderGeneralActionList(generalActions: List<GeneralActionEntity>) {
+        binding.generalActionListContainer.removeAllViews()
+
+        for (generalAction in generalActions) {
+            val itemView = LayoutInflater.from(context)
+                .inflate(R.layout.item_general_action, binding.generalActionListContainer, false) as TextView
+
+            val status = if (generalAction.endDate != null) " (deleted)" else ""
+            itemView.text = "General Action #${generalAction.id}$status"
+            binding.generalActionListContainer.addView(itemView)
+
+            viewLifecycleOwner.lifecycleScope.launch {
+                val actionsInGroup = db.generalActionDao()
+                    .getActionsInGeneral(generalAction.id)
+                    .first()
+                val names = actionsInGroup.joinToString(", ") { it.name }
+                itemView.text = "${names.ifEmpty { "General Action #${generalAction.id}" }}$status"
+            }
+        }
+    }
+
+    private fun showCreateGeneralActionDialog() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val allActions: List<ActionEntity> = db.actionDao().getAllForDsla(dslaId).first()
+
+            if (allActions.size < 2) {
+                Toast.makeText(
+                    requireContext(),
+                    R.string.general_action_no_actions_available,
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@launch
+            }
+
+            val dialogView = LayoutInflater.from(requireContext())
+                .inflate(R.layout.dialog_create_general_action, null)
+            val descField = dialogView.findViewById<EditText>(R.id.edit_general_action_description)
+            val checkboxContainer = dialogView.findViewById<LinearLayout>(R.id.checkbox_container)
+
+            val checkBoxes = mutableListOf<Pair<CheckBox, ActionEntity>>()
+            for (action in allActions) {
+                val checkBox = CheckBox(requireContext())
+                checkBox.text = action.name
+                checkBox.setTextColor(android.graphics.Color.BLACK)
+                checkboxContainer.addView(checkBox)
+                checkBoxes.add(checkBox to action)
+            }
+
+            AlertDialog.Builder(requireContext())
+                .setView(dialogView)
+                .setPositiveButton(R.string.general_action_save) { _, _ ->
+                    val description = descField.text.toString().trim()
+                    val selectedActions = checkBoxes.filter { it.first.isChecked }.map { it.second }
+
+                    if (selectedActions.size < 2) {
+                        Toast.makeText(
+                            requireContext(),
+                            R.string.general_action_min_actions_required,
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        saveGeneralAction(description, selectedActions)
+                    }
+                }
+                .setNegativeButton(R.string.general_action_cancel, null)
+                .show()
+        }
+    }
+
+    private fun saveGeneralAction(description: String, selectedActions: List<ActionEntity>) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val newId = db.generalActionDao().insert(
+                GeneralActionEntity(
+                    dslaId = dslaId,
+                    description = description
+                )
+            )
+            for (action in selectedActions) {
+                db.generalActionDao().addActionToGeneral(
+                    GeneralActionActionCrossRef(
+                        generalActionId = newId,
+                        actionId = action.id
+                    )
+                )
+            }
+        }
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        _binding = null
     }
 }
