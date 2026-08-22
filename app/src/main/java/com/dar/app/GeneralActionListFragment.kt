@@ -75,16 +75,8 @@ class GeneralActionListFragment : Fragment() {
                 .inflate(R.layout.item_general_action, binding.generalActionListContainer, false) as TextView
 
             val status = if (generalAction.endDate != null) " (deleted)" else ""
-            itemView.text = "General Action #${generalAction.id}$status"
+            itemView.text = "${generalAction.name}$status"
             binding.generalActionListContainer.addView(itemView)
-
-            viewLifecycleOwner.lifecycleScope.launch {
-                val actionsInGroup = db.generalActionDao()
-                    .getActionsInGeneral(generalAction.id)
-                    .first()
-                val names = actionsInGroup.joinToString(", ") { it.name }
-                itemView.text = "${names.ifEmpty { "General Action #${generalAction.id}" }}$status"
-            }
         }
     }
 
@@ -103,6 +95,7 @@ class GeneralActionListFragment : Fragment() {
 
             val dialogView = LayoutInflater.from(requireContext())
                 .inflate(R.layout.dialog_create_general_action, null)
+            val nameField = dialogView.findViewById<EditText>(R.id.edit_general_action_name)
             val descField = dialogView.findViewById<EditText>(R.id.edit_general_action_description)
             val checkboxContainer = dialogView.findViewById<LinearLayout>(R.id.checkbox_container)
 
@@ -118,17 +111,20 @@ class GeneralActionListFragment : Fragment() {
             AlertDialog.Builder(requireContext())
                 .setView(dialogView)
                 .setPositiveButton(R.string.general_action_save) { _, _ ->
+                    val name = nameField.text.toString().trim()
                     val description = descField.text.toString().trim()
                     val selectedActions = checkBoxes.filter { it.first.isChecked }.map { it.second }
 
-                    if (selectedActions.size < 2) {
+                    if (name.isEmpty()) {
+                        Toast.makeText(requireContext(), R.string.general_action_name_required, Toast.LENGTH_SHORT).show()
+                    } else if (selectedActions.size < 2) {
                         Toast.makeText(
                             requireContext(),
                             R.string.general_action_min_actions_required,
                             Toast.LENGTH_SHORT
                         ).show()
                     } else {
-                        saveGeneralAction(description, selectedActions)
+                        saveGeneralAction(name, description, selectedActions)
                     }
                 }
                 .setNegativeButton(R.string.general_action_cancel, null)
@@ -136,11 +132,12 @@ class GeneralActionListFragment : Fragment() {
         }
     }
 
-    private fun saveGeneralAction(description: String, selectedActions: List<ActionEntity>) {
+    private fun saveGeneralAction(name: String, description: String, selectedActions: List<ActionEntity>) {
         viewLifecycleOwner.lifecycleScope.launch {
             val newId = db.generalActionDao().insert(
                 GeneralActionEntity(
                     dslaId = dslaId,
+                    name = name,
                     description = description
                 )
             )
