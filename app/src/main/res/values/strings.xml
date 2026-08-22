@@ -56,4 +56,13 @@
     <string name="action_detail_format">ID: %1$d\nName: %2$s\nDescription: %3$s</string>
     <string name="general_action_detail_format">ID: %1$d\nName: %2$s\nDescription: %3$s\n\nActions: %4$s</string>
     <string name="super_action_detail_format">ID: %1$d\nName: %2$s\nDescription: %3$s\n\nGeneral Actions: %4$s\n\nActions: %5$s</string>
+    <string name="recording_add_row">+ Row</string>
+    <string name="recording_save">Save</string>
+    <string name="recording_cancel">Cancel</string>
+    <string name="recording_action_hint">Action</string>
+    <string name="recording_quan_hint">Quan1</string>
+    <string name="recording_comment_hint">Comment</string>
+    <string name="recording_cancel_confirm">Cancel will erase everything entered today. Continue?</string>
+    <string name="recording_cancel_yes">Yes, erase</string>
+    <string name="recording_cancel_no">No, keep editing</string>
 </resources>
