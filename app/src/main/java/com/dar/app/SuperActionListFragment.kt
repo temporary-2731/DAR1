@@ -76,7 +76,51 @@ class SuperActionListFragment : Fragment() {
 
             val status = if (superAction.endDate != null) " (deleted)" else ""
             itemView.text = "${superAction.name}$status"
+            itemView.setOnClickListener { showSuperActionDetail(superAction) }
             binding.superActionListContainer.addView(itemView)
+        }
+    }
+
+    private fun showSuperActionDetail(superAction: SuperActionEntity) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val memberGenerals = db.superActionDao()
+                .getGeneralActionsInSuper(superAction.id)
+                .first()
+
+            val generalNames = if (memberGenerals.isEmpty()) {
+                getString(R.string.detail_none)
+            } else {
+                memberGenerals.joinToString(", ") { it.name }
+            }
+
+            val allActionNames = mutableSetOf<String>()
+            for (generalAction in memberGenerals) {
+                val actionsInGeneral = db.generalActionDao()
+                    .getActionsInGeneral(generalAction.id)
+                    .first()
+                allActionNames.addAll(actionsInGeneral.map { it.name })
+            }
+            val actionNamesText = if (allActionNames.isEmpty()) {
+                getString(R.string.detail_none)
+            } else {
+                allActionNames.joinToString(", ")
+            }
+
+            val desc = superAction.description.ifEmpty { getString(R.string.detail_no_description) }
+
+            val message = getString(
+                R.string.super_action_detail_format,
+                superAction.id,
+                superAction.name,
+                desc,
+                generalNames,
+                actionNamesText
+            )
+            AlertDialog.Builder(requireContext())
+                .setTitle(superAction.name)
+                .setMessage(message)
+                .setPositiveButton(R.string.detail_close, null)
+                .show()
         }
     }
 
@@ -137,10 +181,6 @@ class SuperActionListFragment : Fragment() {
         }
     }
 
-    /**
-     * Enforces the mutual-exclusivity rule: every pair of selected General Actions
-     * must share zero Actions in common. If any pair overlaps, saving is blocked.
-     */
     private fun validateAndSave(name: String, description: String, selectedGenerals: List<GeneralActionEntity>) {
         viewLifecycleOwner.lifecycleScope.launch {
             val actionSets = selectedGenerals.map { generalAction ->
