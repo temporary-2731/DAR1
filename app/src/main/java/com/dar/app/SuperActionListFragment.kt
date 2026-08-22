@@ -75,16 +75,8 @@ class SuperActionListFragment : Fragment() {
                 .inflate(R.layout.item_super_action, binding.superActionListContainer, false) as TextView
 
             val status = if (superAction.endDate != null) " (deleted)" else ""
-            itemView.text = "Super Action #${superAction.id}$status"
+            itemView.text = "${superAction.name}$status"
             binding.superActionListContainer.addView(itemView)
-
-            viewLifecycleOwner.lifecycleScope.launch {
-                val generalsInGroup = db.superActionDao()
-                    .getGeneralActionsInSuper(superAction.id)
-                    .first()
-                val labels = generalsInGroup.joinToString(", ") { "GA#${it.id}" }
-                itemView.text = "${labels.ifEmpty { "Super Action #${superAction.id}" }}$status"
-            }
         }
     }
 
@@ -104,13 +96,14 @@ class SuperActionListFragment : Fragment() {
 
             val dialogView = LayoutInflater.from(requireContext())
                 .inflate(R.layout.dialog_create_super_action, null)
+            val nameField = dialogView.findViewById<EditText>(R.id.edit_super_action_name)
             val descField = dialogView.findViewById<EditText>(R.id.edit_super_action_description)
             val checkboxContainer = dialogView.findViewById<LinearLayout>(R.id.checkbox_container)
 
             val checkBoxes = mutableListOf<Pair<CheckBox, GeneralActionEntity>>()
             for (generalAction in allGeneralActions) {
                 val checkBox = CheckBox(requireContext())
-                checkBox.text = "General Action #${generalAction.id}"
+                checkBox.text = generalAction.name
                 checkBox.setTextColor(android.graphics.Color.BLACK)
                 checkboxContainer.addView(checkBox)
                 checkBoxes.add(checkBox to generalAction)
@@ -119,17 +112,24 @@ class SuperActionListFragment : Fragment() {
             AlertDialog.Builder(requireContext())
                 .setView(dialogView)
                 .setPositiveButton(R.string.super_action_save) { _, _ ->
+                    val name = nameField.text.toString().trim()
                     val description = descField.text.toString().trim()
                     val selectedGenerals = checkBoxes.filter { it.first.isChecked }.map { it.second }
 
-                    if (selectedGenerals.size < 2) {
-                        Toast.makeText(
-                            requireContext(),
-                            R.string.super_action_min_generals_required,
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    } else {
-                        saveSuperAction(description, selectedGenerals)
+                    when {
+                        name.isEmpty() -> {
+                            Toast.makeText(requireContext(), R.string.super_action_name_required, Toast.LENGTH_SHORT).show()
+                        }
+                        selectedGenerals.size < 2 -> {
+                            Toast.makeText(
+                                requireContext(),
+                                R.string.super_action_min_generals_required,
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                        else -> {
+                            validateAndSave(name, description, selectedGenerals)
+                        }
                     }
                 }
                 .setNegativeButton(R.string.super_action_cancel, null)
@@ -137,11 +137,41 @@ class SuperActionListFragment : Fragment() {
         }
     }
 
-    private fun saveSuperAction(description: String, selectedGenerals: List<GeneralActionEntity>) {
+    /**
+     * Enforces the mutual-exclusivity rule: every pair of selected General Actions
+     * must share zero Actions in common. If any pair overlaps, saving is blocked.
+     */
+    private fun validateAndSave(name: String, description: String, selectedGenerals: List<GeneralActionEntity>) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val actionSets = selectedGenerals.map { generalAction ->
+                db.generalActionDao().getActionsInGeneral(generalAction.id).first()
+                    .map { it.id }
+                    .toSet()
+            }
+
+            for (i in actionSets.indices) {
+                for (j in i + 1 until actionSets.size) {
+                    if (actionSets[i].intersect(actionSets[j]).isNotEmpty()) {
+                        Toast.makeText(
+                            requireContext(),
+                            R.string.super_action_not_mutually_exclusive,
+                            Toast.LENGTH_LONG
+                        ).show()
+                        return@launch
+                    }
+                }
+            }
+
+            saveSuperAction(name, description, selectedGenerals)
+        }
+    }
+
+    private fun saveSuperAction(name: String, description: String, selectedGenerals: List<GeneralActionEntity>) {
         viewLifecycleOwner.lifecycleScope.launch {
             val newId = db.superActionDao().insert(
                 SuperActionEntity(
                     dslaId = dslaId,
+                    name = name,
                     description = description
                 )
             )
