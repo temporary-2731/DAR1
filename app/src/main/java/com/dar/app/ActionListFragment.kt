@@ -70,8 +70,24 @@ class ActionListFragment : Fragment() {
 
             val status = if (action.endDate != null) " (deleted)" else ""
             itemView.text = "${action.name}$status"
+            itemView.setOnClickListener { showActionDetail(action) }
             binding.actionListContainer.addView(itemView)
         }
+    }
+
+    private fun showActionDetail(action: ActionEntity) {
+        val desc = action.description.ifEmpty { getString(R.string.detail_no_description) }
+        val message = getString(
+            R.string.action_detail_format,
+            action.id,
+            action.name,
+            desc
+        )
+        AlertDialog.Builder(requireContext())
+            .setTitle(action.name)
+            .setMessage(message)
+            .setPositiveButton(R.string.detail_close, null)
+            .show()
     }
 
     private fun showCreateActionDialog() {
