@@ -27,7 +27,6 @@
     <string name="action_name_hint">e.g. Sleep, Study, Gym</string>
     <string name="action_description_label">Description</string>
     <string name="action_description_hint">Optional short description</string>
-    <string name="super_action_coming_soon">Super Action — coming in the next build</string>
     <string name="general_action_add">+ Add General Action</string>
     <string name="general_action_save">Save</string>
     <string name="general_action_cancel">Cancel</string>
@@ -36,4 +35,12 @@
     <string name="general_action_select_actions_label">Select 2 or more Actions</string>
     <string name="general_action_min_actions_required">Select at least 2 Actions</string>
     <string name="general_action_no_actions_available">You need at least 2 Actions in the Action tab first</string>
+    <string name="super_action_add">+ Add Super Action</string>
+    <string name="super_action_save">Save</string>
+    <string name="super_action_cancel">Cancel</string>
+    <string name="super_action_description_label">Description</string>
+    <string name="super_action_description_hint">Optional short description</string>
+    <string name="super_action_select_generals_label">Select 2 or more General Actions</string>
+    <string name="super_action_min_generals_required">Select at least 2 General Actions</string>
+    <string name="super_action_no_generals_available">You need at least 2 General Actions in the General Action tab first</string>
 </resources>
