@@ -76,7 +76,35 @@ class GeneralActionListFragment : Fragment() {
 
             val status = if (generalAction.endDate != null) " (deleted)" else ""
             itemView.text = "${generalAction.name}$status"
+            itemView.setOnClickListener { showGeneralActionDetail(generalAction) }
             binding.generalActionListContainer.addView(itemView)
+        }
+    }
+
+    private fun showGeneralActionDetail(generalAction: GeneralActionEntity) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val memberActions = db.generalActionDao()
+                .getActionsInGeneral(generalAction.id)
+                .first()
+            val memberNames = if (memberActions.isEmpty()) {
+                getString(R.string.detail_none)
+            } else {
+                memberActions.joinToString(", ") { it.name }
+            }
+            val desc = generalAction.description.ifEmpty { getString(R.string.detail_no_description) }
+
+            val message = getString(
+                R.string.general_action_detail_format,
+                generalAction.id,
+                generalAction.name,
+                desc,
+                memberNames
+            )
+            AlertDialog.Builder(requireContext())
+                .setTitle(generalAction.name)
+                .setMessage(message)
+                .setPositiveButton(R.string.detail_close, null)
+                .show()
         }
     }
 
