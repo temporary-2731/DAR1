@@ -17,4 +17,16 @@
     <string name="section_report">Report</string>
     <string name="section_history">History</string>
     <string name="section_tools">Tools</string>
+    <string name="tab_action">Action</string>
+    <string name="tab_general_action">General Action</string>
+    <string name="tab_super_action">Super Action</string>
+    <string name="action_add">+ Add Action</string>
+    <string name="action_save">Save</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_name_label">Action Name</string>
+    <string name="action_name_hint">e.g. Sleep, Study, Gym</string>
+    <string name="action_description_label">Description</string>
+    <string name="action_description_hint">Optional short description</string>
+    <string name="general_action_coming_soon">General Action — coming in the next build</string>
+    <string name="super_action_coming_soon">Super Action — coming in the next build</string>
 </resources>
