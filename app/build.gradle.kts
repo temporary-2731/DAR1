@@ -40,12 +40,16 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
-    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
 
-    // Room (Library/Recording/History data layer — wired up in the next build)
+    // Room (Library/Recording/History data layer)
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
     kapt("androidx.room:room-compiler:2.6.1")
+
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     implementation("androidx.activity:activity-ktx:1.9.1")
+
+    // Library section: tabs + fragments
+    implementation("androidx.fragment:fragment-ktx:1.8.2")
+    implementation("androidx.viewpager2:viewpager2:1.1.0")
 }
