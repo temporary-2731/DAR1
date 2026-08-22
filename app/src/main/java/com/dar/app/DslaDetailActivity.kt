@@ -27,12 +27,19 @@ class DslaDetailActivity : AppCompatActivity() {
 
         binding.titleDslaName.text = dslaName
 
-        binding.btnRecording.setOnClickListener { sectionComingSoon("Recording") }
+        binding.btnRecording.setOnClickListener { openRecording() }
         binding.btnLibrary.setOnClickListener { openLibrary() }
         binding.btnAnalysis.setOnClickListener { sectionComingSoon("Analysis") }
         binding.btnReport.setOnClickListener { sectionComingSoon("Report") }
         binding.btnHistory.setOnClickListener { sectionComingSoon("History") }
         binding.btnTools.setOnClickListener { sectionComingSoon("Tools") }
+    }
+
+    private fun openRecording() {
+        val intent = Intent(this, RecordingActivity::class.java).apply {
+            putExtra(RecordingActivity.EXTRA_DSLA_ID, dslaId)
+        }
+        startActivity(intent)
     }
 
     private fun openLibrary() {
