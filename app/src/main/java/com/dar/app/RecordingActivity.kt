@@ -6,8 +6,10 @@ import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
+import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -15,12 +17,29 @@ import com.dar.app.data.ActionEntity
 import com.dar.app.data.AppDatabase
 import com.dar.app.data.RecordingRow
 import com.dar.app.databinding.ActivityRecordingBinding
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.floor
+
+private enum class FieldType { ACTION, TIME, QUAN1, QUAN2, QUAN3, COMMENT }
+
+private enum class CellCategory { ACTION, COMMENT, VALUE }
+
+private sealed class ClipboardContent {
+    data class Cell(val category: CellCategory, val value: String) : ClipboardContent()
+    data class Row(
+        val actionName: String,
+        val timeValue: String,
+        val quan1: String,
+        val quan2: String,
+        val quan3: String,
+        val comment: String
+    ) : ClipboardContent()
+}
 
 class RecordingActivity : AppCompatActivity() {
 
@@ -32,6 +51,7 @@ class RecordingActivity : AppCompatActivity() {
 
     private var libraryActions: List<ActionEntity> = emptyList()
     private lateinit var actionNameAdapter: ArrayAdapter<String>
+    private var clipboard: ClipboardContent? = null
 
     private data class RowBinding(
         var row: RecordingRow,
@@ -208,8 +228,224 @@ class RecordingActivity : AppCompatActivity() {
             })
         }
 
+        // Long-press: cell menu (Copy / Cut / Delete / Paste)
+        rowLabel.isLongClickable = true
+        rowLabel.setOnLongClickListener {
+            showRowMenu(binder)
+            true
+        }
+
+        actionField.setOnLongClickListener {
+            showCellMenu(binder, FieldType.ACTION)
+            true
+        }
+        commentField.setOnLongClickListener {
+            showCellMenu(binder, FieldType.COMMENT)
+            true
+        }
+        if (timeEnabled) {
+            timeField?.setOnLongClickListener {
+                showCellMenu(binder, FieldType.TIME)
+                true
+            }
+            quanFields.getOrNull(0)?.setOnLongClickListener {
+                showCellMenu(binder, FieldType.QUAN1)
+                true
+            }
+        } else {
+            quanFields.getOrNull(0)?.setOnLongClickListener {
+                showCellMenu(binder, FieldType.QUAN1)
+                true
+            }
+            quanFields.getOrNull(1)?.setOnLongClickListener {
+                showCellMenu(binder, FieldType.QUAN2)
+                true
+            }
+            quanFields.getOrNull(2)?.setOnLongClickListener {
+                showCellMenu(binder, FieldType.QUAN3)
+                true
+            }
+        }
+
         binding.rowContainer.addView(rowView)
     }
+
+    // ---------- Cell menu (single cell) ----------
+
+    private fun categoryOf(fieldType: FieldType): CellCategory = when (fieldType) {
+        FieldType.ACTION -> CellCategory.ACTION
+        FieldType.COMMENT -> CellCategory.COMMENT
+        else -> CellCategory.VALUE
+    }
+
+    private fun getFieldValue(binder: RowBinding, fieldType: FieldType): String = when (fieldType) {
+        FieldType.ACTION -> binder.row.actionName
+        FieldType.TIME -> binder.row.timeValue
+        FieldType.QUAN1 -> binder.row.quan1
+        FieldType.QUAN2 -> binder.row.quan2
+        FieldType.QUAN3 -> binder.row.quan3
+        FieldType.COMMENT -> binder.row.comment
+    }
+
+    private fun setFieldValue(binder: RowBinding, fieldType: FieldType, value: String) {
+        binder.row = when (fieldType) {
+            FieldType.ACTION -> binder.row.copy(actionName = value)
+            FieldType.TIME -> binder.row.copy(timeValue = value)
+            FieldType.QUAN1 -> binder.row.copy(quan1 = value)
+            FieldType.QUAN2 -> binder.row.copy(quan2 = value)
+            FieldType.QUAN3 -> binder.row.copy(quan3 = value)
+            FieldType.COMMENT -> binder.row.copy(comment = value)
+        }
+        persistRow(binder.row)
+
+        val targetField: EditText? = when (fieldType) {
+            FieldType.ACTION -> binder.actionField
+            FieldType.TIME -> binder.timeField
+            FieldType.QUAN1 -> binder.quanFields.getOrNull(0)
+            FieldType.QUAN2 -> binder.quanFields.getOrNull(1)
+            FieldType.QUAN3 -> binder.quanFields.getOrNull(2)
+            FieldType.COMMENT -> binder.commentField
+        }
+        targetField?.setText(value)
+
+        if (fieldType == FieldType.TIME) {
+            recomputeAllDurations()
+        }
+    }
+
+    private fun showCellMenu(binder: RowBinding, fieldType: FieldType) {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_cell_menu, null)
+        val btnCopy = dialogView.findViewById<Button>(R.id.btn_copy)
+        val btnCut = dialogView.findViewById<Button>(R.id.btn_cut)
+        val btnDelete = dialogView.findViewById<Button>(R.id.btn_delete)
+        val btnPaste = dialogView.findViewById<Button>(R.id.btn_paste)
+
+        val category = categoryOf(fieldType)
+        val clip = clipboard
+        val canPaste = clip is ClipboardContent.Cell && clip.category == category
+        btnPaste.isEnabled = canPaste
+        btnPaste.alpha = if (canPaste) 1f else 0.4f
+
+        val sheet = BottomSheetDialog(this)
+        sheet.setContentView(dialogView)
+
+        btnCopy.setOnClickListener {
+            clipboard = ClipboardContent.Cell(category, getFieldValue(binder, fieldType))
+            Toast.makeText(this, R.string.recording_copied, Toast.LENGTH_SHORT).show()
+            sheet.dismiss()
+        }
+        btnCut.setOnClickListener {
+            clipboard = ClipboardContent.Cell(category, getFieldValue(binder, fieldType))
+            setFieldValue(binder, fieldType, "")
+            Toast.makeText(this, R.string.recording_cut, Toast.LENGTH_SHORT).show()
+            sheet.dismiss()
+        }
+        btnDelete.setOnClickListener {
+            setFieldValue(binder, fieldType, "")
+            sheet.dismiss()
+        }
+        btnPaste.setOnClickListener {
+            val currentClip = clipboard
+            if (currentClip is ClipboardContent.Cell && currentClip.category == category) {
+                setFieldValue(binder, fieldType, currentClip.value)
+            }
+            sheet.dismiss()
+        }
+
+        sheet.show()
+    }
+
+    // ---------- Row menu ----------
+
+    private fun rowToClipboard(binder: RowBinding): ClipboardContent.Row {
+        return ClipboardContent.Row(
+            actionName = binder.row.actionName,
+            timeValue = binder.row.timeValue,
+            quan1 = binder.row.quan1,
+            quan2 = binder.row.quan2,
+            quan3 = binder.row.quan3,
+            comment = binder.row.comment
+        )
+    }
+
+    private fun clearRow(binder: RowBinding) {
+        binder.row = binder.row.copy(
+            actionName = "",
+            timeValue = "",
+            quan1 = "",
+            quan2 = "",
+            quan3 = "",
+            comment = ""
+        )
+        persistRow(binder.row)
+        refreshRowFieldsFromModel(binder)
+        recomputeAllDurations()
+    }
+
+    private fun applyRowClipboard(binder: RowBinding, clip: ClipboardContent.Row) {
+        binder.row = binder.row.copy(
+            actionName = clip.actionName,
+            timeValue = clip.timeValue,
+            quan1 = clip.quan1,
+            quan2 = clip.quan2,
+            quan3 = clip.quan3,
+            comment = clip.comment
+        )
+        persistRow(binder.row)
+        refreshRowFieldsFromModel(binder)
+        recomputeAllDurations()
+    }
+
+    private fun refreshRowFieldsFromModel(binder: RowBinding) {
+        binder.actionField.setText(binder.row.actionName)
+        binder.timeField?.setText(binder.row.timeValue)
+        binder.commentField.setText(binder.row.comment)
+        binder.quanFields.getOrNull(0)?.setText(binder.row.quan1)
+        binder.quanFields.getOrNull(1)?.setText(binder.row.quan2)
+        binder.quanFields.getOrNull(2)?.setText(binder.row.quan3)
+    }
+
+    private fun showRowMenu(binder: RowBinding) {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_row_menu, null)
+        val btnCopyRow = dialogView.findViewById<Button>(R.id.btn_copy_row)
+        val btnCutRow = dialogView.findViewById<Button>(R.id.btn_cut_row)
+        val btnDeleteRow = dialogView.findViewById<Button>(R.id.btn_delete_row)
+        val btnPasteRow = dialogView.findViewById<Button>(R.id.btn_paste_row)
+
+        val canPaste = clipboard is ClipboardContent.Row
+        btnPasteRow.isEnabled = canPaste
+        btnPasteRow.alpha = if (canPaste) 1f else 0.4f
+
+        val sheet = BottomSheetDialog(this)
+        sheet.setContentView(dialogView)
+
+        btnCopyRow.setOnClickListener {
+            clipboard = rowToClipboard(binder)
+            Toast.makeText(this, R.string.recording_copied, Toast.LENGTH_SHORT).show()
+            sheet.dismiss()
+        }
+        btnCutRow.setOnClickListener {
+            clipboard = rowToClipboard(binder)
+            clearRow(binder)
+            Toast.makeText(this, R.string.recording_cut, Toast.LENGTH_SHORT).show()
+            sheet.dismiss()
+        }
+        btnDeleteRow.setOnClickListener {
+            clearRow(binder)
+            sheet.dismiss()
+        }
+        btnPasteRow.setOnClickListener {
+            val clip = clipboard
+            if (clip is ClipboardContent.Row) {
+                applyRowClipboard(binder, clip)
+            }
+            sheet.dismiss()
+        }
+
+        sheet.show()
+    }
+
+    // ---------- Navigation ----------
 
     private fun buildFieldMatrix() {
         fieldMatrix.clear()
@@ -263,6 +499,8 @@ class RecordingActivity : AppCompatActivity() {
         if (currentCol < row.size - 1) focusCell(currentRow, currentCol + 1)
     }
 
+    // ---------- Duration ----------
+
     private fun recomputeAllDurations() {
         if (!timeEnabled) return
 
@@ -296,6 +534,8 @@ class RecordingActivity : AppCompatActivity() {
         if (minutes >= 60) return null
         return hours * 60 + minutes
     }
+
+    // ---------- Persistence & misc ----------
 
     private fun persistRow(row: RecordingRow) {
         lifecycleScope.launch {
