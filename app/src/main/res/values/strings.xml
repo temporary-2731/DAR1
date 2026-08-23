@@ -69,4 +69,8 @@
     <string name="recording_cancel_confirm">Cancel will erase everything entered today. Continue?</string>
     <string name="recording_cancel_yes">Yes, erase</string>
     <string name="recording_cancel_no">No, keep editing</string>
+    <string name="arrow_left">◀</string>
+    <string name="arrow_up">▲</string>
+    <string name="arrow_down">▼</string>
+    <string name="arrow_right">▶</string>
 </resources>
