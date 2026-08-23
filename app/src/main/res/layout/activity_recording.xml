@@ -12,12 +12,50 @@
         android:textStyle="bold"
         android:textColor="#000000"
         android:gravity="center"
-        android:padding="16dp" />
+        android:padding="12dp" />
+
+    <LinearLayout
+        android:id="@+id/arrow_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/date_header"
+        android:orientation="horizontal"
+        android:paddingBottom="4dp">
+
+        <Button
+            android:id="@+id/btn_arrow_left"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/arrow_left" />
+
+        <Button
+            android:id="@+id/btn_arrow_up"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/arrow_up" />
+
+        <Button
+            android:id="@+id/btn_arrow_down"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/arrow_down" />
+
+        <Button
+            android:id="@+id/btn_arrow_right"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/arrow_right" />
+
+    </LinearLayout>
 
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_below="@id/date_header"
+        android:layout_below="@id/arrow_bar"
         android:layout_above="@id/button_row">
 
         <HorizontalScrollView
