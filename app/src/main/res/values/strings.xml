@@ -73,4 +73,14 @@
     <string name="arrow_up">▲</string>
     <string name="arrow_down">▼</string>
     <string name="arrow_right">▶</string>
+    <string name="cell_menu_copy">Copy</string>
+    <string name="cell_menu_cut">Cut</string>
+    <string name="cell_menu_delete">Delete</string>
+    <string name="cell_menu_paste">Paste</string>
+    <string name="row_menu_copy">Copy Row</string>
+    <string name="row_menu_cut">Cut Row</string>
+    <string name="row_menu_delete">Delete Row</string>
+    <string name="row_menu_paste">Paste Row</string>
+    <string name="recording_copied">Copied</string>
+    <string name="recording_cut">Cut</string>
 </resources>
