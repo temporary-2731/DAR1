@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="vertical"
     android:background="@color/dar_light">
 
     <TextView
@@ -14,12 +15,32 @@
         android:gravity="center"
         android:padding="12dp" />
 
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <LinearLayout
+                android:id="@+id/row_container"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="8dp" />
+
+        </HorizontalScrollView>
+
+    </ScrollView>
+
     <LinearLayout
         android:id="@+id/arrow_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_below="@id/date_header"
         android:orientation="horizontal"
+        android:paddingTop="4dp"
         android:paddingBottom="4dp">
 
         <Button
@@ -52,32 +73,10 @@
 
     </LinearLayout>
 
-    <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_below="@id/arrow_bar"
-        android:layout_above="@id/button_row">
-
-        <HorizontalScrollView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content">
-
-            <LinearLayout
-                android:id="@+id/row_container"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="8dp" />
-
-        </HorizontalScrollView>
-
-    </ScrollView>
-
     <LinearLayout
         android:id="@+id/button_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
         android:orientation="horizontal"
         android:padding="16dp">
 
@@ -106,4 +105,4 @@
 
     </LinearLayout>
 
-</RelativeLayout>
+</LinearLayout>
