@@ -60,8 +60,12 @@
     <string name="recording_save">Save</string>
     <string name="recording_cancel">Cancel</string>
     <string name="recording_action_hint">Action</string>
+    <string name="recording_time_hint">HH.MM</string>
     <string name="recording_quan_hint">Quan1</string>
+    <string name="recording_quan2_hint">Quan2</string>
+    <string name="recording_quan3_hint">Quan3</string>
     <string name="recording_comment_hint">Comment</string>
+    <string name="recording_duration_pending">—</string>
     <string name="recording_cancel_confirm">Cancel will erase everything entered today. Continue?</string>
     <string name="recording_cancel_yes">Yes, erase</string>
     <string name="recording_cancel_no">No, keep editing</string>
