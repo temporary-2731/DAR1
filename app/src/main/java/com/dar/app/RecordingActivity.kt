@@ -3,8 +3,8 @@ package com.dar.app
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
-import android.widget.ArrayAdapter
 import android.view.LayoutInflater
+import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.EditText
 import android.widget.TextView
@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.floor
 
 class RecordingActivity : AppCompatActivity() {
 
@@ -42,6 +43,9 @@ class RecordingActivity : AppCompatActivity() {
     )
 
     private val rowBindings = mutableListOf<RowBinding>()
+    private val fieldMatrix = mutableListOf<MutableList<EditText>>()
+    private var currentRow = 0
+    private var currentCol = 0
 
     companion object {
         const val EXTRA_DSLA_ID = "extra_dsla_id"
@@ -63,6 +67,11 @@ class RecordingActivity : AppCompatActivity() {
         binding.btnAddRow.setOnClickListener { addNewRow() }
         binding.btnSave.setOnClickListener { finish() }
         binding.btnCancel.setOnClickListener { confirmCancel() }
+
+        binding.btnArrowLeft.setOnClickListener { moveLeft() }
+        binding.btnArrowRight.setOnClickListener { moveRight() }
+        binding.btnArrowUp.setOnClickListener { moveUp() }
+        binding.btnArrowDown.setOnClickListener { moveDown() }
 
         actionNameAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, mutableListOf())
 
@@ -98,6 +107,7 @@ class RecordingActivity : AppCompatActivity() {
             addRowView(row)
         }
         recomputeAllDurations()
+        buildFieldMatrix()
     }
 
     private fun addRowView(row: RecordingRow) {
@@ -201,6 +211,58 @@ class RecordingActivity : AppCompatActivity() {
         binding.rowContainer.addView(rowView)
     }
 
+    private fun buildFieldMatrix() {
+        fieldMatrix.clear()
+        for ((rowIndex, binder) in rowBindings.withIndex()) {
+            val fields = mutableListOf<EditText>()
+            fields.add(binder.actionField)
+            if (timeEnabled) {
+                binder.timeField?.let { fields.add(it) }
+                binder.quanFields.getOrNull(0)?.let { fields.add(it) }
+            } else {
+                fields.addAll(binder.quanFields)
+            }
+            fields.add(binder.commentField)
+            fieldMatrix.add(fields)
+
+            for ((colIndex, field) in fields.withIndex()) {
+                field.setOnFocusChangeListener { _, hasFocus ->
+                    if (hasFocus) {
+                        currentRow = rowIndex
+                        currentCol = colIndex
+                    }
+                }
+            }
+        }
+    }
+
+    private fun focusCell(row: Int, col: Int) {
+        val rowFields = fieldMatrix.getOrNull(row) ?: return
+        val clampedCol = col.coerceIn(0, rowFields.size - 1)
+        rowFields[clampedCol].requestFocus()
+    }
+
+    private fun moveUp() {
+        if (currentRow > 0) focusCell(currentRow - 1, currentCol)
+    }
+
+    private fun moveDown() {
+        if (currentRow < fieldMatrix.size - 1) {
+            focusCell(currentRow + 1, currentCol)
+        } else {
+            addNewRow(focusCol = currentCol)
+        }
+    }
+
+    private fun moveLeft() {
+        if (currentCol > 0) focusCell(currentRow, currentCol - 1)
+    }
+
+    private fun moveRight() {
+        val row = fieldMatrix.getOrNull(currentRow) ?: return
+        if (currentCol < row.size - 1) focusCell(currentRow, currentCol + 1)
+    }
+
     private fun recomputeAllDurations() {
         if (!timeEnabled) return
 
@@ -215,7 +277,7 @@ class RecordingActivity : AppCompatActivity() {
                     ""
                 }
             } else {
-                "" // final row's duration needs Tf — added once Tools/Library defines it
+                ""
             }
 
             current.row = current.row.copy(durationValue = durationText)
@@ -226,9 +288,12 @@ class RecordingActivity : AppCompatActivity() {
 
     private fun parseTimeToMinutes(value: String): Int? {
         if (value.isBlank()) return null
-        val parts = value.split(".")
-        val hours = parts.getOrNull(0)?.toIntOrNull() ?: return null
-        val minutes = if (parts.size > 1) (parts[1].toIntOrNull() ?: 0) else 0
+        val floatValue = value.toFloatOrNull() ?: return null
+        if (floatValue < 0) return null
+        val hours = floor(floatValue).toInt()
+        val fractional = floatValue - hours
+        val minutes = Math.round(fractional * 100f)
+        if (minutes >= 60) return null
         return hours * 60 + minutes
     }
 
@@ -248,7 +313,7 @@ class RecordingActivity : AppCompatActivity() {
         }
     }
 
-    private fun addNewRow() {
+    private fun addNewRow(focusCol: Int? = null) {
         lifecycleScope.launch {
             val currentCount = db.recordingDao().countForDate(dslaId, todayDate)
             db.recordingDao().insert(
@@ -256,6 +321,9 @@ class RecordingActivity : AppCompatActivity() {
             )
             val rows = db.recordingDao().getRowsForDate(dslaId, todayDate)
             renderRows(rows)
+            if (focusCol != null) {
+                focusCell(fieldMatrix.size - 1, focusCol)
+            }
         }
     }
 
