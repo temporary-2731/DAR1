@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:padding="4dp"
+    android:gravity="center_vertical">
+
+    <TextView
+        android:id="@+id/row_number_label"
+        android:layout_width="24dp"
+        android:layout_height="wrap_content"
+        android:textColor="#000000"
+        android:gravity="center"
+        android:text="1" />
+
+    <EditText
+        android:id="@+id/edit_action_name"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="2"
+        android:hint="@string/recording_action_hint"
+        android:inputType="text"
+        android:textSize="13sp" />
+
+    <EditText
+        android:id="@+id/edit_time"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:hint="@string/recording_time_hint"
+        android:inputType="numberDecimal"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/view_duration"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:textColor="#666666"
+        android:text="@string/recording_duration_pending" />
+
+    <EditText
+        android:id="@+id/edit_quan1"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:hint="@string/recording_quan_hint"
+        android:inputType="number"
+        android:textSize="13sp" />
+
+    <EditText
+        android:id="@+id/edit_comment"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="2"
+        android:hint="@string/recording_comment_hint"
+        android:inputType="text"
+        android:textSize="13sp" />
+
+</LinearLayout>
