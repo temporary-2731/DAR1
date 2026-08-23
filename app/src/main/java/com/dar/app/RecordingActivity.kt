@@ -3,16 +3,19 @@ package com.dar.app
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.widget.ArrayAdapter
 import android.view.LayoutInflater
-import android.view.View
+import android.widget.AutoCompleteTextView
 import android.widget.EditText
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.dar.app.data.ActionEntity
 import com.dar.app.data.AppDatabase
 import com.dar.app.data.RecordingRow
 import com.dar.app.databinding.ActivityRecordingBinding
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -26,9 +29,12 @@ class RecordingActivity : AppCompatActivity() {
     private lateinit var todayDate: String
     private var timeEnabled: Boolean = true
 
+    private var libraryActions: List<ActionEntity> = emptyList()
+    private lateinit var actionNameAdapter: ArrayAdapter<String>
+
     private data class RowBinding(
         var row: RecordingRow,
-        val actionField: EditText,
+        val actionField: AutoCompleteTextView,
         val timeField: EditText?,
         val durationView: TextView?,
         val quanFields: List<EditText>,
@@ -58,6 +64,8 @@ class RecordingActivity : AppCompatActivity() {
         binding.btnSave.setOnClickListener { finish() }
         binding.btnCancel.setOnClickListener { confirmCancel() }
 
+        actionNameAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, mutableListOf())
+
         loadAndRenderRows()
     }
 
@@ -65,6 +73,11 @@ class RecordingActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val dsla = db.dslaDao().getById(dslaId)
             timeEnabled = dsla?.timeEnabled ?: true
+
+            libraryActions = db.actionDao().getActiveSortedByFrequency(dslaId).first()
+            actionNameAdapter.clear()
+            actionNameAdapter.addAll(libraryActions.map { it.name })
+            actionNameAdapter.notifyDataSetChanged()
 
             var rows = db.recordingDao().getRowsForDate(dslaId, todayDate)
             if (rows.isEmpty()) {
@@ -96,12 +109,24 @@ class RecordingActivity : AppCompatActivity() {
         val rowView = LayoutInflater.from(this).inflate(layoutRes, binding.rowContainer, false)
 
         val rowLabel = rowView.findViewById<TextView>(R.id.row_number_label)
-        val actionField = rowView.findViewById<EditText>(R.id.edit_action_name)
+        val actionField = rowView.findViewById<AutoCompleteTextView>(R.id.edit_action_name)
         val commentField = rowView.findViewById<EditText>(R.id.edit_comment)
 
         rowLabel.text = row.rowNumber.toString()
         actionField.setText(row.actionName)
         commentField.setText(row.comment)
+
+        actionField.setAdapter(actionNameAdapter)
+        actionField.threshold = 1
+        actionField.setOnItemClickListener { _, _, position, _ ->
+            val selectedName = actionNameAdapter.getItem(position)
+            val matched = libraryActions.firstOrNull { it.name == selectedName }
+            if (matched != null) {
+                lifecycleScope.launch {
+                    db.actionDao().incrementUsage(matched.id)
+                }
+            }
+        }
 
         var timeField: EditText? = null
         var durationView: TextView? = null
