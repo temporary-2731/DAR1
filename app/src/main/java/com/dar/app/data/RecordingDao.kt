@@ -1,7 +1,6 @@
 package com.dar.app.data
 
 import androidx.room.*
-import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface RecordingDao {
@@ -16,7 +15,7 @@ interface RecordingDao {
     suspend fun delete(row: RecordingRow)
 
     @Query("SELECT * FROM recording_row WHERE dslaId = :dslaId AND date = :date ORDER BY rowNumber ASC")
-    fun getRowsForDate(dslaId: Long, date: String): Flow<List<RecordingRow>>
+    suspend fun getRowsForDate(dslaId: Long, date: String): List<RecordingRow>
 
     @Query("DELETE FROM recording_row WHERE dslaId = :dslaId AND date = :date")
     suspend fun deleteAllForDate(dslaId: Long, date: String)
