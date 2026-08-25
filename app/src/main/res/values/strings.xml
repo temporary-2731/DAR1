@@ -79,9 +79,11 @@
     <string name="cell_menu_delete">Delete</string>
     <string name="cell_menu_paste">Paste</string>
     <string name="cell_menu_add_cell">Add Cell</string>
+    <string name="row_menu_row_select">Row Select</string>
     <string name="row_menu_copy">Copy Row</string>
     <string name="row_menu_cut">Cut Row</string>
     <string name="row_menu_delete">Delete Row</string>
+    <string name="row_menu_remove">Remove Row</string>
     <string name="row_menu_paste">Paste Row</string>
     <string name="row_menu_add_row">Add Row</string>
     <string name="recording_copied">Copied</string>
@@ -102,4 +104,5 @@
     <string name="selection_done">Done</string>
     <string name="selection_hint">Tap another cell to extend selection</string>
     <string name="selection_paste_skipped">Some cells were skipped (incompatible type)</string>
+    <string name="row_selection_hint">Tap other row numbers to add them to the selection</string>
 </resources>
