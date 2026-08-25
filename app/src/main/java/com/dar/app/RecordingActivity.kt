@@ -1,6 +1,7 @@
 package com.dar.app
 
 import android.content.Context
+import android.graphics.Color
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -26,10 +27,19 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
 
 private enum class FieldType { ACTION, TIME, QUAN1, QUAN2, QUAN3, COMMENT }
 
 private enum class CellCategory { ACTION, COMMENT, VALUE }
+
+private data class CellSnapshot(
+    val rowOffset: Int,
+    val colOffset: Int,
+    val category: CellCategory,
+    val value: String
+)
 
 private sealed class ClipboardContent {
     data class Cell(val category: CellCategory, val value: String) : ClipboardContent()
@@ -41,6 +51,7 @@ private sealed class ClipboardContent {
         val quan3: String,
         val comment: String
     ) : ClipboardContent()
+    data class Multi(val cells: List<CellSnapshot>) : ClipboardContent()
 }
 
 class RecordingActivity : AppCompatActivity() {
@@ -71,8 +82,17 @@ class RecordingActivity : AppCompatActivity() {
     private var currentRow = 0
     private var currentCol = 0
 
+    // ---- Multi-cell selection state ----
+    private var selectionActive = false
+    private var anchorRow = -1
+    private var anchorCol = -1
+    private var extentRow = -1
+    private var extentCol = -1
+    private val highlightedFields = mutableListOf<EditText>()
+
     companion object {
         const val EXTRA_DSLA_ID = "extra_dsla_id"
+        private const val HIGHLIGHT_COLOR = 0xFFFFE082.toInt()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -96,6 +116,12 @@ class RecordingActivity : AppCompatActivity() {
         binding.btnArrowRight.setOnClickListener { moveRight() }
         binding.btnArrowUp.setOnClickListener { moveUp() }
         binding.btnArrowDown.setOnClickListener { moveDown() }
+
+        binding.btnSelCopy.setOnClickListener { copySelection() }
+        binding.btnSelCut.setOnClickListener { cutSelection() }
+        binding.btnSelDelete.setOnClickListener { deleteSelection() }
+        binding.btnSelPaste.setOnClickListener { pasteSelection() }
+        binding.btnSelDone.setOnClickListener { endSelection() }
 
         actionNameAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, mutableListOf())
 
@@ -124,7 +150,16 @@ class RecordingActivity : AppCompatActivity() {
         }
     }
 
+    private fun columnTypesForMode(): List<FieldType> {
+        return if (timeEnabled) {
+            listOf(FieldType.ACTION, FieldType.TIME, FieldType.QUAN1, FieldType.COMMENT)
+        } else {
+            listOf(FieldType.ACTION, FieldType.QUAN1, FieldType.QUAN2, FieldType.QUAN3, FieldType.COMMENT)
+        }
+    }
+
     private fun renderRows(rows: List<RecordingRow>) {
+        endSelection()
         binding.rowContainer.removeAllViews()
         rowBindings.clear()
 
@@ -215,8 +250,6 @@ class RecordingActivity : AppCompatActivity() {
             }
         }
 
-        // Real-time validation: every keystroke must keep the text as a valid
-        // prefix of at least one Library Action name (case-insensitive).
         actionField.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
@@ -245,7 +278,6 @@ class RecordingActivity : AppCompatActivity() {
             }
         })
 
-        // On focus loss: finalize to an exact Library name if possible, otherwise revert.
         actionField.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) {
                 currentRow = thisRowIndex
@@ -350,13 +382,198 @@ class RecordingActivity : AppCompatActivity() {
         binding.rowContainer.addView(rowView)
     }
 
-    // ---------- Cell menu (single cell) ----------
+    // ---------- Field matrix + selection click wiring ----------
+
+    private fun buildFieldMatrix() {
+        fieldMatrix.clear()
+        for ((rowIndex, binder) in rowBindings.withIndex()) {
+            val fields = mutableListOf<EditText>()
+            fields.add(binder.actionField)
+            if (timeEnabled) {
+                binder.timeField?.let { fields.add(it) }
+                binder.quanFields.getOrNull(0)?.let { fields.add(it) }
+            } else {
+                fields.addAll(binder.quanFields)
+            }
+            fields.add(binder.commentField)
+            fieldMatrix.add(fields)
+
+            for ((colIndex, field) in fields.withIndex()) {
+                if (field != binder.actionField) {
+                    field.setOnFocusChangeListener { _, hasFocus ->
+                        if (hasFocus) {
+                            currentRow = rowIndex
+                            currentCol = colIndex
+                        }
+                    }
+                }
+                field.setOnClickListener {
+                    if (selectionActive) {
+                        extendSelection(rowIndex, colIndex)
+                    }
+                }
+            }
+        }
+    }
+
+    // ---------- Selection mode ----------
+
+    private fun setFieldsFocusable(focusable: Boolean) {
+        for (row in fieldMatrix) {
+            for (field in row) {
+                field.isFocusable = focusable
+                field.isFocusableInTouchMode = focusable
+            }
+        }
+    }
+
+    private fun startSelection(row: Int, col: Int) {
+        selectionActive = true
+        anchorRow = row
+        anchorCol = col
+        extentRow = row
+        extentCol = col
+        setFieldsFocusable(false)
+        binding.selectionToolbar.visibility = android.view.View.VISIBLE
+        updateSelectionHighlight()
+        Toast.makeText(this, R.string.selection_hint, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun extendSelection(row: Int, col: Int) {
+        extentRow = row
+        extentCol = col
+        updateSelectionHighlight()
+    }
+
+    private fun endSelection() {
+        if (!selectionActive) return
+        selectionActive = false
+        for (field in highlightedFields) {
+            field.setBackgroundColor(Color.TRANSPARENT)
+        }
+        highlightedFields.clear()
+        anchorRow = -1; anchorCol = -1; extentRow = -1; extentCol = -1
+        setFieldsFocusable(true)
+        binding.selectionToolbar.visibility = android.view.View.GONE
+    }
+
+    private fun selectionBounds(): IntArray {
+        val minRow = min(anchorRow, extentRow)
+        val maxRow = max(anchorRow, extentRow)
+        val minCol = min(anchorCol, extentCol)
+        val maxCol = max(anchorCol, extentCol)
+        return intArrayOf(minRow, maxRow, minCol, maxCol)
+    }
+
+    private fun updateSelectionHighlight() {
+        for (field in highlightedFields) {
+            field.setBackgroundColor(Color.TRANSPARENT)
+        }
+        highlightedFields.clear()
+
+        val (minRow, maxRow, minCol, maxCol) = selectionBounds().toList()
+        for (r in minRow..maxRow) {
+            val rowFields = fieldMatrix.getOrNull(r) ?: continue
+            for (c in minCol..maxCol) {
+                val field = rowFields.getOrNull(c) ?: continue
+                field.setBackgroundColor(HIGHLIGHT_COLOR)
+                highlightedFields.add(field)
+            }
+        }
+    }
 
     private fun categoryOf(fieldType: FieldType): CellCategory = when (fieldType) {
         FieldType.ACTION -> CellCategory.ACTION
         FieldType.COMMENT -> CellCategory.COMMENT
         else -> CellCategory.VALUE
     }
+
+    private fun copySelection() {
+        val (minRow, maxRow, minCol, maxCol) = selectionBounds().toList()
+        val colTypes = columnTypesForMode()
+        val snapshots = mutableListOf<CellSnapshot>()
+        for (r in minRow..maxRow) {
+            for (c in minCol..maxCol) {
+                val fieldType = colTypes.getOrNull(c) ?: continue
+                val value = getFieldValue(rowBindings[r], fieldType)
+                snapshots.add(CellSnapshot(r - minRow, c - minCol, categoryOf(fieldType), value))
+            }
+        }
+        clipboard = ClipboardContent.Multi(snapshots)
+        Toast.makeText(this, R.string.recording_copied, Toast.LENGTH_SHORT).show()
+        endSelection()
+    }
+
+    private fun cutSelection() {
+        val (minRow, maxRow, minCol, maxCol) = selectionBounds().toList()
+        copySelectionWithoutEnding()
+        val colTypes = columnTypesForMode()
+        val rowSpan = maxRow - minRow + 1
+        for (c in minCol..maxCol) {
+            val fieldType = colTypes.getOrNull(c) ?: continue
+            shiftColumnUp(fieldType, minRow, rowSpan)
+        }
+        Toast.makeText(this, R.string.recording_cut, Toast.LENGTH_SHORT).show()
+        endSelection()
+    }
+
+    private fun copySelectionWithoutEnding() {
+        val (minRow, maxRow, minCol, maxCol) = selectionBounds().toList()
+        val colTypes = columnTypesForMode()
+        val snapshots = mutableListOf<CellSnapshot>()
+        for (r in minRow..maxRow) {
+            for (c in minCol..maxCol) {
+                val fieldType = colTypes.getOrNull(c) ?: continue
+                val value = getFieldValue(rowBindings[r], fieldType)
+                snapshots.add(CellSnapshot(r - minRow, c - minCol, categoryOf(fieldType), value))
+            }
+        }
+        clipboard = ClipboardContent.Multi(snapshots)
+    }
+
+    private fun deleteSelection() {
+        val (minRow, maxRow, minCol, maxCol) = selectionBounds().toList()
+        val colTypes = columnTypesForMode()
+        val rowSpan = maxRow - minRow + 1
+        for (c in minCol..maxCol) {
+            val fieldType = colTypes.getOrNull(c) ?: continue
+            shiftColumnUp(fieldType, minRow, rowSpan)
+        }
+        endSelection()
+    }
+
+    private fun pasteSelection() {
+        val clip = clipboard
+        if (clip !is ClipboardContent.Multi) {
+            endSelection()
+            return
+        }
+        val (minRow, _, minCol, _) = selectionBounds().toList()
+        val colTypes = columnTypesForMode()
+        var skipped = 0
+
+        for (snapshot in clip.cells) {
+            val targetRow = minRow + snapshot.rowOffset
+            val targetCol = minCol + snapshot.colOffset
+            if (targetRow !in rowBindings.indices || targetCol !in colTypes.indices) {
+                skipped++
+                continue
+            }
+            val targetFieldType = colTypes[targetCol]
+            if (categoryOf(targetFieldType) != snapshot.category) {
+                skipped++
+                continue
+            }
+            setFieldValue(rowBindings[targetRow], targetFieldType, snapshot.value)
+        }
+
+        if (skipped > 0) {
+            Toast.makeText(this, R.string.selection_paste_skipped, Toast.LENGTH_SHORT).show()
+        }
+        endSelection()
+    }
+
+    // ---------- Cell menu (single cell) ----------
 
     private fun getFieldValue(binder: RowBinding, fieldType: FieldType): String = when (fieldType) {
         FieldType.ACTION -> binder.row.actionName
@@ -397,16 +614,21 @@ class RecordingActivity : AppCompatActivity() {
         }
     }
 
-    private fun performColumnShiftUp(fieldType: FieldType, startRowIndex: Int) {
-        val currentValues = rowBindings.map { getFieldValue(it, fieldType) }
-        for (i in startRowIndex until rowBindings.size) {
-            val newValue = if (i == rowBindings.size - 1) "" else currentValues[i + 1]
-            setFieldValue(rowBindings[i], fieldType, newValue)
+    /** Removes [count] values starting at [startRow] in the given column and shifts everything below up. */
+    private fun shiftColumnUp(fieldType: FieldType, startRow: Int, count: Int) {
+        val values = rowBindings.map { getFieldValue(it, fieldType) }.toMutableList()
+        repeat(count) {
+            if (startRow < values.size) values.removeAt(startRow)
+        }
+        while (values.size < rowBindings.size) values.add("")
+        for (i in rowBindings.indices) {
+            setFieldValue(rowBindings[i], fieldType, values[i])
         }
     }
 
     private fun showCellMenu(binder: RowBinding, fieldType: FieldType, rowIndex: Int) {
         val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_cell_menu, null)
+        val btnSelect = dialogView.findViewById<Button>(R.id.btn_select)
         val btnCopy = dialogView.findViewById<Button>(R.id.btn_copy)
         val btnCut = dialogView.findViewById<Button>(R.id.btn_cut)
         val btnDelete = dialogView.findViewById<Button>(R.id.btn_delete)
@@ -421,6 +643,12 @@ class RecordingActivity : AppCompatActivity() {
         val sheet = BottomSheetDialog(this)
         sheet.setContentView(dialogView)
 
+        val colIndex = columnTypesForMode().indexOf(fieldType)
+
+        btnSelect.setOnClickListener {
+            sheet.dismiss()
+            startSelection(rowIndex, colIndex)
+        }
         btnCopy.setOnClickListener {
             clipboard = ClipboardContent.Cell(category, getFieldValue(binder, fieldType))
             Toast.makeText(this, R.string.recording_copied, Toast.LENGTH_SHORT).show()
@@ -428,12 +656,12 @@ class RecordingActivity : AppCompatActivity() {
         }
         btnCut.setOnClickListener {
             clipboard = ClipboardContent.Cell(category, getFieldValue(binder, fieldType))
-            performColumnShiftUp(fieldType, rowIndex)
+            shiftColumnUp(fieldType, rowIndex, 1)
             Toast.makeText(this, R.string.recording_cut, Toast.LENGTH_SHORT).show()
             sheet.dismiss()
         }
         btnDelete.setOnClickListener {
-            performColumnShiftUp(fieldType, rowIndex)
+            shiftColumnUp(fieldType, rowIndex, 1)
             sheet.dismiss()
         }
         btnPaste.setOnClickListener {
@@ -540,33 +768,6 @@ class RecordingActivity : AppCompatActivity() {
     }
 
     // ---------- Navigation ----------
-
-    private fun buildFieldMatrix() {
-        fieldMatrix.clear()
-        for ((rowIndex, binder) in rowBindings.withIndex()) {
-            val fields = mutableListOf<EditText>()
-            fields.add(binder.actionField)
-            if (timeEnabled) {
-                binder.timeField?.let { fields.add(it) }
-                binder.quanFields.getOrNull(0)?.let { fields.add(it) }
-            } else {
-                fields.addAll(binder.quanFields)
-            }
-            fields.add(binder.commentField)
-            fieldMatrix.add(fields)
-
-            for ((colIndex, field) in fields.withIndex()) {
-                if (field != binder.actionField) {
-                    field.setOnFocusChangeListener { _, hasFocus ->
-                        if (hasFocus) {
-                            currentRow = rowIndex
-                            currentCol = colIndex
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     private fun focusCell(row: Int, col: Int) {
         val rowFields = fieldMatrix.getOrNull(row) ?: return
