@@ -84,4 +84,12 @@
     <string name="recording_copied">Copied</string>
     <string name="recording_cut">Cut</string>
     <string name="recording_invalid_action">Action must match a Library Action</string>
+    <string name="header_row_number">#</string>
+    <string name="header_action">Action</string>
+    <string name="header_time">Time</string>
+    <string name="header_duration">Duration</string>
+    <string name="header_quan1">Quan1</string>
+    <string name="header_quan2">Quan2</string>
+    <string name="header_quan3">Quan3</string>
+    <string name="header_comment">Comment</string>
 </resources>
