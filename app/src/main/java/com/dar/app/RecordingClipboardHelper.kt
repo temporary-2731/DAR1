@@ -11,7 +11,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlin.math.min
 
-// ---------- Selection mode ----------
+// ---------- Selection mode (single/multi cell) ----------
 
 fun RecordingActivity.setFieldsFocusable(focusable: Boolean) {
     for (row in fieldMatrix) {
@@ -54,7 +54,6 @@ fun RecordingActivity.extendSelection(row: Int, col: Int) {
     updateSelectionHighlight()
 }
 
-/** Clears the highlight but keeps the selection toolbar open, awaiting a new anchor tap for pasting. */
 fun RecordingActivity.keepSelectionAwaitingPaste() {
     for (field in highlightedFields) {
         field.setBackgroundColor(Color.TRANSPARENT)
@@ -175,10 +174,6 @@ fun RecordingActivity.deleteSelection() {
     endSelection()
 }
 
-/**
- * Pastes the clipboard's rectangle with its top-left at the current selection anchor.
- * If the target needs rows that don't exist yet, they're created first automatically.
- */
 fun RecordingActivity.pasteSelection() {
     val clip = clipboard
     if (clip !is ClipboardContent.Multi) {
@@ -286,7 +281,6 @@ fun RecordingActivity.shiftColumnUp(fieldType: FieldType, startRow: Int, count: 
 
 // ---------- Add Row / Add Cell (insert-and-shift) ----------
 
-/** Inserts a blank row directly below [binder]'s row, shifting every row below it down by one. */
 fun RecordingActivity.insertRowAfter(binder: RowBinding) {
     lifecycleScope.launch {
         val insertPosition = binder.row.rowNumber
@@ -304,11 +298,6 @@ fun RecordingActivity.insertRowAfter(binder: RowBinding) {
     }
 }
 
-/**
- * Inserts a blank value at [insertRowIndex] within the given column, shifting everything
- * below it in that column down by one. If the column's last row already holds a value,
- * a new row is created first so nothing is lost.
- */
 fun RecordingActivity.insertCellAt(fieldType: FieldType, insertRowIndex: Int) {
     val currentValues = rowBindings.map { getFieldValue(it, fieldType) }
     val lastValue = currentValues.lastOrNull() ?: ""
@@ -339,6 +328,26 @@ private fun RecordingActivity.performColumnInsert(
     val trimmed = values.take(rowBindings.size)
     for (i in rowBindings.indices) {
         setFieldValue(rowBindings[i], fieldType, trimmed.getOrElse(i) { "" })
+    }
+}
+
+/** Physically deletes a single row and renumbers everything below it up by one. */
+fun RecordingActivity.removeRow(binder: RowBinding) {
+    lifecycleScope.launch {
+        val removedNumber = binder.row.rowNumber
+        db.recordingDao().delete(binder.row)
+        val remaining = db.recordingDao().getRowsForDate(dslaId, todayDate)
+        for (r in remaining) {
+            if (r.rowNumber > removedNumber) {
+                db.recordingDao().update(r.copy(rowNumber = r.rowNumber - 1))
+            }
+        }
+        var updatedRows = db.recordingDao().getRowsForDate(dslaId, todayDate)
+        if (updatedRows.isEmpty()) {
+            db.recordingDao().insert(RecordingRow(dslaId = dslaId, date = todayDate, rowNumber = 1))
+            updatedRows = db.recordingDao().getRowsForDate(dslaId, todayDate)
+        }
+        renderRows(updatedRows)
     }
 }
 
@@ -398,7 +407,7 @@ fun RecordingActivity.showCellMenu(binder: RowBinding, fieldType: FieldType, row
     sheet.show()
 }
 
-// ---------- Row menu ----------
+// ---------- Row menu (single row) ----------
 
 fun RecordingActivity.rowToClipboard(binder: RowBinding): ClipboardContent.Row {
     return ClipboardContent.Row(
@@ -450,11 +459,13 @@ fun RecordingActivity.refreshRowFieldsFromModel(binder: RowBinding) {
     binder.quanFields.getOrNull(2)?.setText(binder.row.quan3)
 }
 
-fun RecordingActivity.showRowMenu(binder: RowBinding) {
+fun RecordingActivity.showRowMenu(binder: RowBinding, rowIndex: Int) {
     val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_row_menu, null)
+    val btnRowSelect = dialogView.findViewById<Button>(R.id.btn_row_select)
     val btnCopyRow = dialogView.findViewById<Button>(R.id.btn_copy_row)
     val btnCutRow = dialogView.findViewById<Button>(R.id.btn_cut_row)
     val btnDeleteRow = dialogView.findViewById<Button>(R.id.btn_delete_row)
+    val btnRemoveRow = dialogView.findViewById<Button>(R.id.btn_remove_row)
     val btnPasteRow = dialogView.findViewById<Button>(R.id.btn_paste_row)
     val btnInsertRow = dialogView.findViewById<Button>(R.id.btn_insert_row)
 
@@ -465,6 +476,10 @@ fun RecordingActivity.showRowMenu(binder: RowBinding) {
     val sheet = BottomSheetDialog(this)
     sheet.setContentView(dialogView)
 
+    btnRowSelect.setOnClickListener {
+        sheet.dismiss()
+        startRowSelection(rowIndex)
+    }
     btnCopyRow.setOnClickListener {
         clipboard = rowToClipboard(binder)
         Toast.makeText(this, R.string.recording_copied, Toast.LENGTH_SHORT).show()
@@ -478,6 +493,10 @@ fun RecordingActivity.showRowMenu(binder: RowBinding) {
     }
     btnDeleteRow.setOnClickListener {
         clearRow(binder)
+        sheet.dismiss()
+    }
+    btnRemoveRow.setOnClickListener {
+        removeRow(binder)
         sheet.dismiss()
     }
     btnPasteRow.setOnClickListener {
