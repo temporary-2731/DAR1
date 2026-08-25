@@ -6,9 +6,16 @@
     android:padding="16dp">
 
     <Button
+        android:id="@+id/btn_row_select"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/row_menu_row_select" />
+
+    <Button
         android:id="@+id/btn_copy_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
         android:text="@string/row_menu_copy" />
 
     <Button
@@ -24,6 +31,13 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:text="@string/row_menu_delete" />
+
+    <Button
+        android:id="@+id/btn_remove_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/row_menu_remove" />
 
     <Button
         android:id="@+id/btn_paste_row"
