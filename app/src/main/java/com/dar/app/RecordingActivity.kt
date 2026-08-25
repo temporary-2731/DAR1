@@ -48,6 +48,7 @@ class RecordingActivity : AppCompatActivity() {
     var extentRow = -1
     var extentCol = -1
     val highlightedFields = mutableListOf<EditText>()
+    var needsNewAnchor = false
 
     companion object {
         const val EXTRA_DSLA_ID = "extra_dsla_id"
@@ -365,7 +366,11 @@ class RecordingActivity : AppCompatActivity() {
                 }
                 field.setOnClickListener {
                     if (selectionActive) {
-                        extendSelection(rowIndex, colIndex)
+                        if (needsNewAnchor) {
+                            beginNewAnchor(rowIndex, colIndex)
+                        } else {
+                            extendSelection(rowIndex, colIndex)
+                        }
                     }
                 }
             }
@@ -420,7 +425,7 @@ class RecordingActivity : AppCompatActivity() {
         }
     }
 
-    private fun addNewRow(focusCol: Int? = null) {
+    fun addNewRow(focusCol: Int? = null) {
         lifecycleScope.launch {
             val currentCount = db.recordingDao().countForDate(dslaId, todayDate)
             db.recordingDao().insert(
