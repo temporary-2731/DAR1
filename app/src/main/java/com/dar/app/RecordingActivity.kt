@@ -1,9 +1,11 @@
 package com.dar.app
 
+import android.content.Context
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.LayoutInflater
+import android.view.inputmethod.InputMethodManager
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.Button
@@ -53,13 +55,14 @@ class RecordingActivity : AppCompatActivity() {
     private lateinit var actionNameAdapter: ArrayAdapter<String>
     private var clipboard: ClipboardContent? = null
 
-    private data class RowBinding(
+    private class RowBinding(
         var row: RecordingRow,
         val actionField: AutoCompleteTextView,
         val timeField: EditText?,
         val durationView: TextView?,
         val quanFields: List<EditText>,
-        val commentField: EditText
+        val commentField: EditText,
+        var lastValidActionName: String
     )
 
     private val rowBindings = mutableListOf<RowBinding>()
@@ -148,15 +151,6 @@ class RecordingActivity : AppCompatActivity() {
 
         actionField.setAdapter(actionNameAdapter)
         actionField.threshold = 1
-        actionField.setOnItemClickListener { _, _, position, _ ->
-            val selectedName = actionNameAdapter.getItem(position)
-            val matched = libraryActions.firstOrNull { it.name == selectedName }
-            if (matched != null) {
-                lifecycleScope.launch {
-                    db.actionDao().incrementUsage(matched.id)
-                }
-            }
-        }
 
         var timeField: EditText? = null
         var durationView: TextView? = null
@@ -189,14 +183,53 @@ class RecordingActivity : AppCompatActivity() {
             timeField = timeField,
             durationView = durationView,
             quanFields = quanFields,
-            commentField = commentField
+            commentField = commentField,
+            lastValidActionName = row.actionName
         )
         rowBindings.add(binder)
+        val thisRowIndex = rowBindings.size - 1
+
+        actionField.setOnItemClickListener { _, _, position, _ ->
+            val selectedName = actionNameAdapter.getItem(position)
+            val matched = libraryActions.firstOrNull { it.name == selectedName }
+            if (matched != null) {
+                binder.lastValidActionName = matched.name
+                lifecycleScope.launch {
+                    db.actionDao().incrementUsage(matched.id)
+                }
+            }
+        }
 
         actionField.addTextChangedListener(simpleWatcher { text ->
             binder.row = binder.row.copy(actionName = text)
             persistRow(binder.row)
         })
+
+        // Validate Action text against Library on focus loss — case-insensitive.
+        actionField.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) {
+                currentRow = thisRowIndex
+                currentCol = fieldMatrix.getOrNull(thisRowIndex)?.indexOf(actionField) ?: 0
+            } else {
+                val typed = actionField.text.toString().trim()
+                if (typed.isNotEmpty()) {
+                    val matched = libraryActions.firstOrNull { it.name.equals(typed, ignoreCase = true) }
+                    if (matched != null) {
+                        if (typed != matched.name) {
+                            actionField.setText(matched.name)
+                        }
+                        binder.lastValidActionName = matched.name
+                        binder.row = binder.row.copy(actionName = matched.name)
+                        persistRow(binder.row)
+                    } else {
+                        Toast.makeText(this, R.string.recording_invalid_action, Toast.LENGTH_SHORT).show()
+                        actionField.setText(binder.lastValidActionName)
+                        binder.row = binder.row.copy(actionName = binder.lastValidActionName)
+                        persistRow(binder.row)
+                    }
+                }
+            }
+        }
 
         commentField.addTextChangedListener(simpleWatcher { text ->
             binder.row = binder.row.copy(comment = text)
@@ -236,33 +269,33 @@ class RecordingActivity : AppCompatActivity() {
         }
 
         actionField.setOnLongClickListener {
-            showCellMenu(binder, FieldType.ACTION)
+            showCellMenu(binder, FieldType.ACTION, thisRowIndex)
             true
         }
         commentField.setOnLongClickListener {
-            showCellMenu(binder, FieldType.COMMENT)
+            showCellMenu(binder, FieldType.COMMENT, thisRowIndex)
             true
         }
         if (timeEnabled) {
             timeField?.setOnLongClickListener {
-                showCellMenu(binder, FieldType.TIME)
+                showCellMenu(binder, FieldType.TIME, thisRowIndex)
                 true
             }
             quanFields.getOrNull(0)?.setOnLongClickListener {
-                showCellMenu(binder, FieldType.QUAN1)
+                showCellMenu(binder, FieldType.QUAN1, thisRowIndex)
                 true
             }
         } else {
             quanFields.getOrNull(0)?.setOnLongClickListener {
-                showCellMenu(binder, FieldType.QUAN1)
+                showCellMenu(binder, FieldType.QUAN1, thisRowIndex)
                 true
             }
             quanFields.getOrNull(1)?.setOnLongClickListener {
-                showCellMenu(binder, FieldType.QUAN2)
+                showCellMenu(binder, FieldType.QUAN2, thisRowIndex)
                 true
             }
             quanFields.getOrNull(2)?.setOnLongClickListener {
-                showCellMenu(binder, FieldType.QUAN3)
+                showCellMenu(binder, FieldType.QUAN3, thisRowIndex)
                 true
             }
         }
@@ -298,6 +331,10 @@ class RecordingActivity : AppCompatActivity() {
         }
         persistRow(binder.row)
 
+        if (fieldType == FieldType.ACTION) {
+            binder.lastValidActionName = value
+        }
+
         val targetField: EditText? = when (fieldType) {
             FieldType.ACTION -> binder.actionField
             FieldType.TIME -> binder.timeField
@@ -313,7 +350,20 @@ class RecordingActivity : AppCompatActivity() {
         }
     }
 
-    private fun showCellMenu(binder: RowBinding, fieldType: FieldType) {
+    /**
+     * Removes the value at [startRowIndex] for the given column ([fieldType]) and shifts
+     * every value below it in that same column up by one — matching the spec's
+     * "remove cell shifts up that column's elements; other columns unaffected."
+     */
+    private fun performColumnShiftUp(fieldType: FieldType, startRowIndex: Int) {
+        val currentValues = rowBindings.map { getFieldValue(it, fieldType) }
+        for (i in startRowIndex until rowBindings.size) {
+            val newValue = if (i == rowBindings.size - 1) "" else currentValues[i + 1]
+            setFieldValue(rowBindings[i], fieldType, newValue)
+        }
+    }
+
+    private fun showCellMenu(binder: RowBinding, fieldType: FieldType, rowIndex: Int) {
         val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_cell_menu, null)
         val btnCopy = dialogView.findViewById<Button>(R.id.btn_copy)
         val btnCut = dialogView.findViewById<Button>(R.id.btn_cut)
@@ -336,12 +386,12 @@ class RecordingActivity : AppCompatActivity() {
         }
         btnCut.setOnClickListener {
             clipboard = ClipboardContent.Cell(category, getFieldValue(binder, fieldType))
-            setFieldValue(binder, fieldType, "")
+            performColumnShiftUp(fieldType, rowIndex)
             Toast.makeText(this, R.string.recording_cut, Toast.LENGTH_SHORT).show()
             sheet.dismiss()
         }
         btnDelete.setOnClickListener {
-            setFieldValue(binder, fieldType, "")
+            performColumnShiftUp(fieldType, rowIndex)
             sheet.dismiss()
         }
         btnPaste.setOnClickListener {
@@ -377,6 +427,7 @@ class RecordingActivity : AppCompatActivity() {
             quan3 = "",
             comment = ""
         )
+        binder.lastValidActionName = ""
         persistRow(binder.row)
         refreshRowFieldsFromModel(binder)
         recomputeAllDurations()
@@ -391,6 +442,7 @@ class RecordingActivity : AppCompatActivity() {
             quan3 = clip.quan3,
             comment = clip.comment
         )
+        binder.lastValidActionName = clip.actionName
         persistRow(binder.row)
         refreshRowFieldsFromModel(binder)
         recomputeAllDurations()
@@ -462,10 +514,12 @@ class RecordingActivity : AppCompatActivity() {
             fieldMatrix.add(fields)
 
             for ((colIndex, field) in fields.withIndex()) {
-                field.setOnFocusChangeListener { _, hasFocus ->
-                    if (hasFocus) {
-                        currentRow = rowIndex
-                        currentCol = colIndex
+                if (field != binder.actionField) {
+                    field.setOnFocusChangeListener { _, hasFocus ->
+                        if (hasFocus) {
+                            currentRow = rowIndex
+                            currentCol = colIndex
+                        }
                     }
                 }
             }
@@ -475,7 +529,12 @@ class RecordingActivity : AppCompatActivity() {
     private fun focusCell(row: Int, col: Int) {
         val rowFields = fieldMatrix.getOrNull(row) ?: return
         val clampedCol = col.coerceIn(0, rowFields.size - 1)
-        rowFields[clampedCol].requestFocus()
+        val field = rowFields[clampedCol]
+        field.requestFocus()
+        field.post {
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.showSoftInput(field, InputMethodManager.SHOW_IMPLICIT)
+        }
     }
 
     private fun moveUp() {
