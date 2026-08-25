@@ -4,7 +4,10 @@ import android.graphics.Color
 import android.view.LayoutInflater
 import android.widget.Button
 import android.widget.Toast
+import androidx.lifecycle.lifecycleScope
+import com.dar.app.data.RecordingRow
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlin.math.min
 
@@ -21,6 +24,7 @@ fun RecordingActivity.setFieldsFocusable(focusable: Boolean) {
 
 fun RecordingActivity.startSelection(row: Int, col: Int) {
     selectionActive = true
+    needsNewAnchor = false
     anchorRow = row
     anchorCol = col
     extentRow = row
@@ -31,15 +35,38 @@ fun RecordingActivity.startSelection(row: Int, col: Int) {
     Toast.makeText(this, R.string.selection_hint, Toast.LENGTH_SHORT).show()
 }
 
+fun RecordingActivity.beginNewAnchor(row: Int, col: Int) {
+    for (field in highlightedFields) {
+        field.setBackgroundColor(Color.TRANSPARENT)
+    }
+    highlightedFields.clear()
+    anchorRow = row
+    anchorCol = col
+    extentRow = row
+    extentCol = col
+    needsNewAnchor = false
+    updateSelectionHighlight()
+}
+
 fun RecordingActivity.extendSelection(row: Int, col: Int) {
     extentRow = row
     extentCol = col
     updateSelectionHighlight()
 }
 
+/** Clears the highlight but keeps the selection toolbar open, awaiting a new anchor tap for pasting. */
+fun RecordingActivity.keepSelectionAwaitingPaste() {
+    for (field in highlightedFields) {
+        field.setBackgroundColor(Color.TRANSPARENT)
+    }
+    highlightedFields.clear()
+    needsNewAnchor = true
+}
+
 fun RecordingActivity.endSelection() {
     if (!selectionActive) return
     selectionActive = false
+    needsNewAnchor = false
     for (field in highlightedFields) {
         field.setBackgroundColor(Color.TRANSPARENT)
     }
@@ -95,7 +122,7 @@ fun RecordingActivity.copySelection() {
     }
     clipboard = ClipboardContent.Multi(snapshots)
     Toast.makeText(this, R.string.recording_copied, Toast.LENGTH_SHORT).show()
-    endSelection()
+    keepSelectionAwaitingPaste()
 }
 
 fun RecordingActivity.cutSelection() {
@@ -112,7 +139,7 @@ fun RecordingActivity.cutSelection() {
         shiftColumnUp(fieldType, minRow, rowSpan)
     }
     Toast.makeText(this, R.string.recording_cut, Toast.LENGTH_SHORT).show()
-    endSelection()
+    keepSelectionAwaitingPaste()
 }
 
 fun RecordingActivity.copySelectionWithoutEnding() {
@@ -148,6 +175,10 @@ fun RecordingActivity.deleteSelection() {
     endSelection()
 }
 
+/**
+ * Pastes the clipboard's rectangle with its top-left at the current selection anchor.
+ * If the target needs rows that don't exist yet, they're created first automatically.
+ */
 fun RecordingActivity.pasteSelection() {
     val clip = clipboard
     if (clip !is ClipboardContent.Multi) {
@@ -157,9 +188,30 @@ fun RecordingActivity.pasteSelection() {
     val bounds = selectionBounds()
     val minRow = bounds[0]
     val minCol = bounds[2]
+    val maxRowOffset = clip.cells.maxOfOrNull { it.rowOffset } ?: 0
+    val neededRowCount = minRow + maxRowOffset + 1
+
+    if (neededRowCount > rowBindings.size) {
+        val rowsToAdd = neededRowCount - rowBindings.size
+        lifecycleScope.launch {
+            repeat(rowsToAdd) {
+                val currentCount = db.recordingDao().countForDate(dslaId, todayDate)
+                db.recordingDao().insert(
+                    RecordingRow(dslaId = dslaId, date = todayDate, rowNumber = currentCount + 1)
+                )
+            }
+            val rows = db.recordingDao().getRowsForDate(dslaId, todayDate)
+            renderRows(rows)
+            completePaste(clip, minRow, minCol)
+        }
+    } else {
+        completePaste(clip, minRow, minCol)
+    }
+}
+
+fun RecordingActivity.completePaste(clip: ClipboardContent.Multi, minRow: Int, minCol: Int) {
     val colTypes = columnTypesForMode()
     var skipped = 0
-
     for (snapshot in clip.cells) {
         val targetRow = minRow + snapshot.rowOffset
         val targetCol = minCol + snapshot.colOffset
@@ -174,7 +226,6 @@ fun RecordingActivity.pasteSelection() {
         }
         setFieldValue(rowBindings[targetRow], targetFieldType, snapshot.value)
     }
-
     if (skipped > 0) {
         Toast.makeText(this, R.string.selection_paste_skipped, Toast.LENGTH_SHORT).show()
     }
@@ -233,6 +284,64 @@ fun RecordingActivity.shiftColumnUp(fieldType: FieldType, startRow: Int, count: 
     }
 }
 
+// ---------- Add Row / Add Cell (insert-and-shift) ----------
+
+/** Inserts a blank row directly below [binder]'s row, shifting every row below it down by one. */
+fun RecordingActivity.insertRowAfter(binder: RowBinding) {
+    lifecycleScope.launch {
+        val insertPosition = binder.row.rowNumber
+        val allRows = db.recordingDao().getRowsForDate(dslaId, todayDate)
+        for (r in allRows) {
+            if (r.rowNumber > insertPosition) {
+                db.recordingDao().update(r.copy(rowNumber = r.rowNumber + 1))
+            }
+        }
+        db.recordingDao().insert(
+            RecordingRow(dslaId = dslaId, date = todayDate, rowNumber = insertPosition + 1)
+        )
+        val updatedRows = db.recordingDao().getRowsForDate(dslaId, todayDate)
+        renderRows(updatedRows)
+    }
+}
+
+/**
+ * Inserts a blank value at [insertRowIndex] within the given column, shifting everything
+ * below it in that column down by one. If the column's last row already holds a value,
+ * a new row is created first so nothing is lost.
+ */
+fun RecordingActivity.insertCellAt(fieldType: FieldType, insertRowIndex: Int) {
+    val currentValues = rowBindings.map { getFieldValue(it, fieldType) }
+    val lastValue = currentValues.lastOrNull() ?: ""
+    val needsOverflowRow = lastValue.isNotEmpty()
+
+    if (needsOverflowRow) {
+        lifecycleScope.launch {
+            val currentCount = db.recordingDao().countForDate(dslaId, todayDate)
+            db.recordingDao().insert(
+                RecordingRow(dslaId = dslaId, date = todayDate, rowNumber = currentCount + 1)
+            )
+            val rows = db.recordingDao().getRowsForDate(dslaId, todayDate)
+            renderRows(rows)
+            performColumnInsert(fieldType, insertRowIndex, currentValues)
+        }
+    } else {
+        performColumnInsert(fieldType, insertRowIndex, currentValues)
+    }
+}
+
+private fun RecordingActivity.performColumnInsert(
+    fieldType: FieldType,
+    insertRowIndex: Int,
+    previousValues: List<String>
+) {
+    val values = previousValues.toMutableList()
+    values.add(insertRowIndex, "")
+    val trimmed = values.take(rowBindings.size)
+    for (i in rowBindings.indices) {
+        setFieldValue(rowBindings[i], fieldType, trimmed.getOrElse(i) { "" })
+    }
+}
+
 // ---------- Cell menu (single cell) ----------
 
 fun RecordingActivity.showCellMenu(binder: RowBinding, fieldType: FieldType, rowIndex: Int) {
@@ -242,6 +351,7 @@ fun RecordingActivity.showCellMenu(binder: RowBinding, fieldType: FieldType, row
     val btnCut = dialogView.findViewById<Button>(R.id.btn_cut)
     val btnDelete = dialogView.findViewById<Button>(R.id.btn_delete)
     val btnPaste = dialogView.findViewById<Button>(R.id.btn_paste)
+    val btnAddCell = dialogView.findViewById<Button>(R.id.btn_add_cell)
 
     val category = categoryOf(fieldType)
     val clip = clipboard
@@ -278,6 +388,10 @@ fun RecordingActivity.showCellMenu(binder: RowBinding, fieldType: FieldType, row
         if (currentClip is ClipboardContent.Cell && currentClip.category == category) {
             setFieldValue(binder, fieldType, currentClip.value)
         }
+        sheet.dismiss()
+    }
+    btnAddCell.setOnClickListener {
+        insertCellAt(fieldType, rowIndex)
         sheet.dismiss()
     }
 
@@ -342,6 +456,7 @@ fun RecordingActivity.showRowMenu(binder: RowBinding) {
     val btnCutRow = dialogView.findViewById<Button>(R.id.btn_cut_row)
     val btnDeleteRow = dialogView.findViewById<Button>(R.id.btn_delete_row)
     val btnPasteRow = dialogView.findViewById<Button>(R.id.btn_paste_row)
+    val btnInsertRow = dialogView.findViewById<Button>(R.id.btn_insert_row)
 
     val canPaste = clipboard is ClipboardContent.Row
     btnPasteRow.isEnabled = canPaste
@@ -370,6 +485,10 @@ fun RecordingActivity.showRowMenu(binder: RowBinding) {
         if (clip is ClipboardContent.Row) {
             applyRowClipboard(binder, clip)
         }
+        sheet.dismiss()
+    }
+    btnInsertRow.setOnClickListener {
+        insertRowAfter(binder)
         sheet.dismiss()
     }
 
