@@ -62,7 +62,8 @@ class RecordingActivity : AppCompatActivity() {
         val durationView: TextView?,
         val quanFields: List<EditText>,
         val commentField: EditText,
-        var lastValidActionName: String
+        var committedActionName: String,
+        var isRevertingActionText: Boolean = false
     )
 
     private val rowBindings = mutableListOf<RowBinding>()
@@ -126,11 +127,23 @@ class RecordingActivity : AppCompatActivity() {
     private fun renderRows(rows: List<RecordingRow>) {
         binding.rowContainer.removeAllViews()
         rowBindings.clear()
+
+        addHeaderView()
         for (row in rows) {
             addRowView(row)
         }
         recomputeAllDurations()
         buildFieldMatrix()
+    }
+
+    private fun addHeaderView() {
+        val layoutRes = if (timeEnabled) {
+            R.layout.item_recording_header_time
+        } else {
+            R.layout.item_recording_header_notime
+        }
+        val headerView = LayoutInflater.from(this).inflate(layoutRes, binding.rowContainer, false)
+        binding.rowContainer.addView(headerView)
     }
 
     private fun addRowView(row: RecordingRow) {
@@ -184,7 +197,7 @@ class RecordingActivity : AppCompatActivity() {
             durationView = durationView,
             quanFields = quanFields,
             commentField = commentField,
-            lastValidActionName = row.actionName
+            committedActionName = row.actionName
         )
         rowBindings.add(binder)
         val thisRowIndex = rowBindings.size - 1
@@ -193,40 +206,75 @@ class RecordingActivity : AppCompatActivity() {
             val selectedName = actionNameAdapter.getItem(position)
             val matched = libraryActions.firstOrNull { it.name == selectedName }
             if (matched != null) {
-                binder.lastValidActionName = matched.name
+                binder.committedActionName = matched.name
+                binder.row = binder.row.copy(actionName = matched.name)
+                persistRow(binder.row)
                 lifecycleScope.launch {
                     db.actionDao().incrementUsage(matched.id)
                 }
             }
         }
 
-        actionField.addTextChangedListener(simpleWatcher { text ->
-            binder.row = binder.row.copy(actionName = text)
-            persistRow(binder.row)
+        // Real-time validation: every keystroke must keep the text as a valid
+        // prefix of at least one Library Action name (case-insensitive).
+        actionField.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (binder.isRevertingActionText) return
+                val newText = s?.toString() ?: ""
+
+                if (newText.isEmpty()) {
+                    binder.row = binder.row.copy(actionName = "")
+                    persistRow(binder.row)
+                    return
+                }
+
+                val hasPrefixMatch = libraryActions.any { it.name.startsWith(newText, ignoreCase = true) }
+                if (hasPrefixMatch) {
+                    binder.row = binder.row.copy(actionName = newText)
+                    persistRow(binder.row)
+                } else {
+                    binder.isRevertingActionText = true
+                    val revertTo = binder.row.actionName
+                    actionField.setText(revertTo)
+                    actionField.setSelection(revertTo.length)
+                    binder.isRevertingActionText = false
+                    Toast.makeText(this@RecordingActivity, R.string.recording_invalid_action, Toast.LENGTH_SHORT).show()
+                }
+            }
         })
 
-        // Validate Action text against Library on focus loss — case-insensitive.
+        // On focus loss: finalize to an exact Library name if possible, otherwise revert.
         actionField.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) {
                 currentRow = thisRowIndex
                 currentCol = fieldMatrix.getOrNull(thisRowIndex)?.indexOf(actionField) ?: 0
             } else {
                 val typed = actionField.text.toString().trim()
-                if (typed.isNotEmpty()) {
-                    val matched = libraryActions.firstOrNull { it.name.equals(typed, ignoreCase = true) }
-                    if (matched != null) {
-                        if (typed != matched.name) {
-                            actionField.setText(matched.name)
-                        }
-                        binder.lastValidActionName = matched.name
-                        binder.row = binder.row.copy(actionName = matched.name)
-                        persistRow(binder.row)
-                    } else {
-                        Toast.makeText(this, R.string.recording_invalid_action, Toast.LENGTH_SHORT).show()
-                        actionField.setText(binder.lastValidActionName)
-                        binder.row = binder.row.copy(actionName = binder.lastValidActionName)
-                        persistRow(binder.row)
-                    }
+                if (typed.isEmpty()) {
+                    binder.committedActionName = ""
+                    return@setOnFocusChangeListener
+                }
+                val exactMatch = libraryActions.firstOrNull { it.name.equals(typed, ignoreCase = true) }
+                if (exactMatch != null) {
+                    actionField.setText(exactMatch.name)
+                    binder.committedActionName = exactMatch.name
+                    binder.row = binder.row.copy(actionName = exactMatch.name)
+                    persistRow(binder.row)
+                    return@setOnFocusChangeListener
+                }
+                val prefixMatches = libraryActions.filter { it.name.startsWith(typed, ignoreCase = true) }
+                if (prefixMatches.size == 1) {
+                    val onlyMatch = prefixMatches[0]
+                    actionField.setText(onlyMatch.name)
+                    binder.committedActionName = onlyMatch.name
+                    binder.row = binder.row.copy(actionName = onlyMatch.name)
+                    persistRow(binder.row)
+                } else {
+                    actionField.setText(binder.committedActionName)
+                    binder.row = binder.row.copy(actionName = binder.committedActionName)
+                    persistRow(binder.row)
                 }
             }
         }
@@ -261,7 +309,6 @@ class RecordingActivity : AppCompatActivity() {
             })
         }
 
-        // Long-press: cell menu (Copy / Cut / Delete / Paste)
         rowLabel.isLongClickable = true
         rowLabel.setOnLongClickListener {
             showRowMenu(binder)
@@ -332,7 +379,7 @@ class RecordingActivity : AppCompatActivity() {
         persistRow(binder.row)
 
         if (fieldType == FieldType.ACTION) {
-            binder.lastValidActionName = value
+            binder.committedActionName = value
         }
 
         val targetField: EditText? = when (fieldType) {
@@ -350,11 +397,6 @@ class RecordingActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Removes the value at [startRowIndex] for the given column ([fieldType]) and shifts
-     * every value below it in that same column up by one — matching the spec's
-     * "remove cell shifts up that column's elements; other columns unaffected."
-     */
     private fun performColumnShiftUp(fieldType: FieldType, startRowIndex: Int) {
         val currentValues = rowBindings.map { getFieldValue(it, fieldType) }
         for (i in startRowIndex until rowBindings.size) {
@@ -427,7 +469,7 @@ class RecordingActivity : AppCompatActivity() {
             quan3 = "",
             comment = ""
         )
-        binder.lastValidActionName = ""
+        binder.committedActionName = ""
         persistRow(binder.row)
         refreshRowFieldsFromModel(binder)
         recomputeAllDurations()
@@ -442,7 +484,7 @@ class RecordingActivity : AppCompatActivity() {
             quan3 = clip.quan3,
             comment = clip.comment
         )
-        binder.lastValidActionName = clip.actionName
+        binder.committedActionName = clip.actionName
         persistRow(binder.row)
         refreshRowFieldsFromModel(binder)
         recomputeAllDurations()
