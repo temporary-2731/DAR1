@@ -78,10 +78,12 @@
     <string name="cell_menu_cut">Cut</string>
     <string name="cell_menu_delete">Delete</string>
     <string name="cell_menu_paste">Paste</string>
+    <string name="cell_menu_add_cell">Add Cell</string>
     <string name="row_menu_copy">Copy Row</string>
     <string name="row_menu_cut">Cut Row</string>
     <string name="row_menu_delete">Delete Row</string>
     <string name="row_menu_paste">Paste Row</string>
+    <string name="row_menu_add_row">Add Row</string>
     <string name="recording_copied">Copied</string>
     <string name="recording_cut">Cut</string>
     <string name="recording_invalid_action">Action must match a Library Action</string>
