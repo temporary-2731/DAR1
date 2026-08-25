@@ -36,6 +36,57 @@
     </ScrollView>
 
     <LinearLayout
+        android:id="@+id/selection_toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp">
+
+        <Button
+            android:id="@+id/btn_sel_copy"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="11sp"
+            android:text="@string/selection_copy" />
+
+        <Button
+            android:id="@+id/btn_sel_cut"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="11sp"
+            android:text="@string/selection_cut" />
+
+        <Button
+            android:id="@+id/btn_sel_delete"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="11sp"
+            android:text="@string/selection_delete" />
+
+        <Button
+            android:id="@+id/btn_sel_paste"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="11sp"
+            android:text="@string/selection_paste" />
+
+        <Button
+            android:id="@+id/btn_sel_done"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="11sp"
+            android:text="@string/selection_done" />
+
+    </LinearLayout>
+
+    <LinearLayout
         android:id="@+id/arrow_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
