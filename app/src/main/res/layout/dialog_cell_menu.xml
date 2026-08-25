@@ -6,9 +6,16 @@
     android:padding="16dp">
 
     <Button
+        android:id="@+id/btn_select"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/cell_menu_select" />
+
+    <Button
         android:id="@+id/btn_copy"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
         android:text="@string/cell_menu_copy" />
 
     <Button
