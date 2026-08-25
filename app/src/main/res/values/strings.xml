@@ -73,6 +73,7 @@
     <string name="arrow_up">▲</string>
     <string name="arrow_down">▼</string>
     <string name="arrow_right">▶</string>
+    <string name="cell_menu_select">Select</string>
     <string name="cell_menu_copy">Copy</string>
     <string name="cell_menu_cut">Cut</string>
     <string name="cell_menu_delete">Delete</string>
@@ -92,4 +93,11 @@
     <string name="header_quan2">Quan2</string>
     <string name="header_quan3">Quan3</string>
     <string name="header_comment">Comment</string>
+    <string name="selection_copy">Copy</string>
+    <string name="selection_cut">Cut</string>
+    <string name="selection_delete">Delete</string>
+    <string name="selection_paste">Paste</string>
+    <string name="selection_done">Done</string>
+    <string name="selection_hint">Tap another cell to extend selection</string>
+    <string name="selection_paste_skipped">Some cells were skipped (incompatible type)</string>
 </resources>
