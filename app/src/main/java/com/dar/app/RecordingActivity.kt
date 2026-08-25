@@ -41,7 +41,7 @@ class RecordingActivity : AppCompatActivity() {
     var currentRow = 0
     var currentCol = 0
 
-    // Multi-cell selection state (used by RecordingClipboardHelper.kt)
+    // Multi-cell selection state
     var selectionActive = false
     var anchorRow = -1
     var anchorCol = -1
@@ -49,6 +49,11 @@ class RecordingActivity : AppCompatActivity() {
     var extentCol = -1
     val highlightedFields = mutableListOf<EditText>()
     var needsNewAnchor = false
+
+    // Whole-row selection state
+    var rowSelectionActive = false
+    val selectedRowIndices = mutableSetOf<Int>()
+    var rowSelectionNeedsNewAnchor = false
 
     companion object {
         const val EXTRA_DSLA_ID = "extra_dsla_id"
@@ -81,6 +86,12 @@ class RecordingActivity : AppCompatActivity() {
         binding.btnSelDelete.setOnClickListener { deleteSelection() }
         binding.btnSelPaste.setOnClickListener { pasteSelection() }
         binding.btnSelDone.setOnClickListener { endSelection() }
+
+        binding.btnRowSelCopy.setOnClickListener { copyRowSelection() }
+        binding.btnRowSelCut.setOnClickListener { cutRowSelection() }
+        binding.btnRowSelDelete.setOnClickListener { deleteRowSelection() }
+        binding.btnRowSelPaste.setOnClickListener { pasteRowSelection() }
+        binding.btnRowSelDone.setOnClickListener { endRowSelection() }
 
         actionNameAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, mutableListOf())
 
@@ -186,6 +197,7 @@ class RecordingActivity : AppCompatActivity() {
 
         val binder = RowBinding(
             row = row,
+            rowLabel = rowLabel,
             actionField = actionField,
             timeField = timeField,
             durationView = durationView,
@@ -302,8 +314,17 @@ class RecordingActivity : AppCompatActivity() {
 
         rowLabel.isLongClickable = true
         rowLabel.setOnLongClickListener {
-            showRowMenu(binder)
+            showRowMenu(binder, thisRowIndex)
             true
+        }
+        rowLabel.setOnClickListener {
+            if (rowSelectionActive) {
+                if (rowSelectionNeedsNewAnchor) {
+                    setRowPasteAnchor(thisRowIndex)
+                } else {
+                    toggleRowSelection(thisRowIndex)
+                }
+            }
         }
 
         actionField.setOnLongClickListener {
