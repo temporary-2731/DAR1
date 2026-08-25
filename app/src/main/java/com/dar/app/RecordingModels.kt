@@ -18,6 +18,16 @@ data class CellSnapshot(
     val value: String
 )
 
+data class RowSnapshot(
+    val offset: Int,
+    val actionName: String,
+    val timeValue: String,
+    val quan1: String,
+    val quan2: String,
+    val quan3: String,
+    val comment: String
+)
+
 sealed class ClipboardContent {
     data class Cell(val category: CellCategory, val value: String) : ClipboardContent()
     data class Row(
@@ -29,10 +39,12 @@ sealed class ClipboardContent {
         val comment: String
     ) : ClipboardContent()
     data class Multi(val cells: List<CellSnapshot>) : ClipboardContent()
+    data class RowBlock(val rows: List<RowSnapshot>) : ClipboardContent()
 }
 
 class RowBinding(
     var row: RecordingRow,
+    val rowLabel: TextView,
     val actionField: AutoCompleteTextView,
     val timeField: EditText?,
     val durationView: TextView?,
