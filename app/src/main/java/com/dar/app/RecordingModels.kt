@@ -12,6 +12,8 @@ enum class FieldType { ACTION, TIME, QUAN1, QUAN2, QUAN3, COMMENT }
 
 enum class CellCategory { ACTION, COMMENT, VALUE }
 
+enum class RecordingMode { RECORDING, HISTORY }
+
 data class CellSnapshot(
     val rowOffset: Int,
     val colOffset: Int,
@@ -29,7 +31,6 @@ data class RowSnapshot(
     val comment: String
 )
 
-/** A full snapshot of every row's data for a given date, used to restore state on Undo/Redo. */
 data class RecordingSnapshot(val rows: List<RecordingRow>)
 
 sealed class ClipboardContent {
