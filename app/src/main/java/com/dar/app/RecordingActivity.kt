@@ -81,7 +81,7 @@ class RecordingActivity : AppCompatActivity() {
             captureUndoSnapshot()
             addNewRow()
         }
-        binding.btnSave.setOnClickListener { finish() }
+        binding.btnSave.setOnClickListener { attemptSave() }
         binding.btnCancel.setOnClickListener { confirmCancel() }
 
         binding.btnArrowLeft.setOnClickListener { moveLeft() }
@@ -475,6 +475,25 @@ class RecordingActivity : AppCompatActivity() {
                 focusCell(fieldMatrix.size - 1, focusCol)
             }
         }
+    }
+
+    /** Validates every row before allowing the screen to close. Action is always required;
+     *  Time is required only when the DSLA has time enabled. */
+    private fun attemptSave() {
+        for ((index, binder) in rowBindings.withIndex()) {
+            val rowNumber = index + 1
+            if (binder.row.actionName.isBlank()) {
+                Toast.makeText(this, getString(R.string.save_missing_action, rowNumber), Toast.LENGTH_LONG).show()
+                focusCell(index, 0)
+                return
+            }
+            if (timeEnabled && binder.row.timeValue.isBlank()) {
+                Toast.makeText(this, getString(R.string.save_missing_time, rowNumber), Toast.LENGTH_LONG).show()
+                focusCell(index, columnTypesForMode().indexOf(FieldType.TIME))
+                return
+            }
+        }
+        finish()
     }
 
     private fun confirmCancel() {
