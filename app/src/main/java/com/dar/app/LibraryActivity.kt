@@ -28,6 +28,7 @@ class LibraryActivity : AppCompatActivity() {
                 0 -> getString(R.string.tab_action)
                 1 -> getString(R.string.tab_general_action)
                 2 -> getString(R.string.tab_super_action)
+                3 -> getString(R.string.tab_recovery)
                 else -> ""
             }
         }.attach()
