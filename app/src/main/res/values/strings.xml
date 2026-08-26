@@ -20,6 +20,7 @@
     <string name="tab_action">Action</string>
     <string name="tab_general_action">General Action</string>
     <string name="tab_super_action">Super Action</string>
+    <string name="tab_recovery">Recovery</string>
     <string name="action_add">+ Add Action</string>
     <string name="action_save">Save</string>
     <string name="action_cancel">Cancel</string>
@@ -27,6 +28,7 @@
     <string name="action_name_hint">e.g. Sleep, Study, Gym</string>
     <string name="action_description_label">Description</string>
     <string name="action_description_hint">Optional short description</string>
+    <string name="action_name_duplicate">An Action with this name already exists</string>
     <string name="general_action_add">+ Add General Action</string>
     <string name="general_action_save">Save</string>
     <string name="general_action_cancel">Cancel</string>
@@ -38,6 +40,7 @@
     <string name="general_action_select_actions_label">Select 2 or more Actions</string>
     <string name="general_action_min_actions_required">Select at least 2 Actions</string>
     <string name="general_action_no_actions_available">You need at least 2 Actions in the Action tab first</string>
+    <string name="general_action_name_duplicate">A General Action with this name already exists</string>
     <string name="super_action_add">+ Add Super Action</string>
     <string name="super_action_save">Save</string>
     <string name="super_action_cancel">Cancel</string>
@@ -50,12 +53,22 @@
     <string name="super_action_min_generals_required">Select at least 2 General Actions</string>
     <string name="super_action_no_generals_available">You need at least 2 General Actions in the General Action tab first</string>
     <string name="super_action_not_mutually_exclusive">Selected General Actions must not share any Action in common</string>
+    <string name="super_action_name_duplicate">A Super Action with this name already exists</string>
     <string name="detail_close">Close</string>
     <string name="detail_no_description">No description</string>
     <string name="detail_none">None</string>
     <string name="action_detail_format">ID: %1$d\nName: %2$s\nDescription: %3$s</string>
     <string name="general_action_detail_format">ID: %1$d\nName: %2$s\nDescription: %3$s\n\nActions: %4$s</string>
     <string name="super_action_detail_format">ID: %1$d\nName: %2$s\nDescription: %3$s\n\nGeneral Actions: %4$s\n\nActions: %5$s</string>
+    <string name="label_created">Created: %1$s</string>
+    <string name="label_deleted">Deleted: %1$s</string>
+    <string name="label_recovered">Recovered: %1$s</string>
+    <string name="library_item_edit">Edit</string>
+    <string name="library_item_delete">Delete</string>
+    <string name="recovery_section_actions">Deleted Actions</string>
+    <string name="recovery_section_generals">Deleted General Actions</string>
+    <string name="recovery_section_supers">Deleted Super Actions</string>
+    <string name="recovery_recover_button">Recover</string>
     <string name="recording_add_row">+ Row</string>
     <string name="recording_save">Save</string>
     <string name="recording_cancel">Cancel</string>
@@ -109,4 +122,5 @@
     <string name="row_selection_hint">Tap other row numbers to add them to the selection</string>
     <string name="save_missing_action">Row %1$d is missing an Action</string>
     <string name="save_missing_time">Row %1$d is missing a Time value</string>
+    <string name="recording_consecutive_action_error">Row %1$d and Row %2$d can\'t have the same Action consecutively</string>
 </resources>
