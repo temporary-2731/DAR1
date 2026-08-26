@@ -138,6 +138,30 @@
     </LinearLayout>
 
     <LinearLayout
+        android:id="@+id/undo_redo_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp">
+
+        <Button
+            android:id="@+id/btn_undo"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/undo_button" />
+
+        <Button
+            android:id="@+id/btn_redo"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/redo_button" />
+
+    </LinearLayout>
+
+    <LinearLayout
         android:id="@+id/arrow_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
