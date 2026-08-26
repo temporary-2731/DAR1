@@ -2,13 +2,16 @@ package com.dar.app
 
 import kotlin.math.floor
 
+private const val MINUTES_PER_DAY = 24 * 60
+
 fun RecordingActivity.recomputeAllDurations() {
     if (!timeEnabled) return
 
     for (i in rowBindings.indices) {
         val current = rowBindings[i]
+        val currentMinutes = parseTimeToMinutes(current.row.timeValue)
+
         val durationText: String = if (i < rowBindings.size - 1) {
-            val currentMinutes = parseTimeToMinutes(current.row.timeValue)
             val nextMinutes = parseTimeToMinutes(rowBindings[i + 1].row.timeValue)
             if (currentMinutes != null && nextMinutes != null) {
                 (nextMinutes - currentMinutes).toString()
@@ -16,7 +19,12 @@ fun RecordingActivity.recomputeAllDurations() {
                 ""
             }
         } else {
-            ""
+            // Final row: duration runs until midnight (24:00 minus this row's time).
+            if (currentMinutes != null) {
+                (MINUTES_PER_DAY - currentMinutes).toString()
+            } else {
+                ""
+            }
         }
 
         current.row = current.row.copy(durationValue = durationText)
