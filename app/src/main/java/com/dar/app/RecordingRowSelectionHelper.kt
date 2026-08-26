@@ -90,7 +90,6 @@ fun RecordingActivity.deleteRowSelection() {
     endRowSelection()
 }
 
-/** Physically removes the selected rows, renumbers what's left, then keeps row-selection mode open awaiting a paste anchor. */
 fun RecordingActivity.removeRowsAndAwaitPaste(sortedIndices: List<Int>) {
     lifecycleScope.launch {
         val rowsToRemove = sortedIndices.map { rowBindings[it].row }
