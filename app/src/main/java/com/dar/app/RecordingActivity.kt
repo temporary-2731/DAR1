@@ -55,6 +55,11 @@ class RecordingActivity : AppCompatActivity() {
     val selectedRowIndices = mutableSetOf<Int>()
     var rowSelectionNeedsNewAnchor = false
 
+    // Undo/Redo stacks
+    val undoStack = ArrayDeque<RecordingSnapshot>()
+    val redoStack = ArrayDeque<RecordingSnapshot>()
+    var suppressSnapshotCapture = false
+
     companion object {
         const val EXTRA_DSLA_ID = "extra_dsla_id"
     }
@@ -72,7 +77,10 @@ class RecordingActivity : AppCompatActivity() {
         val dayName = SimpleDateFormat("EEEE", Locale.getDefault()).format(Date())
         binding.dateHeader.text = "$todayDate  $dayName"
 
-        binding.btnAddRow.setOnClickListener { addNewRow() }
+        binding.btnAddRow.setOnClickListener {
+            captureUndoSnapshot()
+            addNewRow()
+        }
         binding.btnSave.setOnClickListener { finish() }
         binding.btnCancel.setOnClickListener { confirmCancel() }
 
@@ -82,16 +90,19 @@ class RecordingActivity : AppCompatActivity() {
         binding.btnArrowDown.setOnClickListener { moveDown() }
 
         binding.btnSelCopy.setOnClickListener { copySelection() }
-        binding.btnSelCut.setOnClickListener { cutSelection() }
-        binding.btnSelDelete.setOnClickListener { deleteSelection() }
-        binding.btnSelPaste.setOnClickListener { pasteSelection() }
+        binding.btnSelCut.setOnClickListener { captureUndoSnapshot(); cutSelection() }
+        binding.btnSelDelete.setOnClickListener { captureUndoSnapshot(); deleteSelection() }
+        binding.btnSelPaste.setOnClickListener { captureUndoSnapshot(); pasteSelection() }
         binding.btnSelDone.setOnClickListener { endSelection() }
 
         binding.btnRowSelCopy.setOnClickListener { copyRowSelection() }
-        binding.btnRowSelCut.setOnClickListener { cutRowSelection() }
-        binding.btnRowSelDelete.setOnClickListener { deleteRowSelection() }
-        binding.btnRowSelPaste.setOnClickListener { pasteRowSelection() }
+        binding.btnRowSelCut.setOnClickListener { captureUndoSnapshot(); cutRowSelection() }
+        binding.btnRowSelDelete.setOnClickListener { captureUndoSnapshot(); deleteRowSelection() }
+        binding.btnRowSelPaste.setOnClickListener { captureUndoSnapshot(); pasteRowSelection() }
         binding.btnRowSelDone.setOnClickListener { endRowSelection() }
+
+        binding.btnUndo.setOnClickListener { performUndo() }
+        binding.btnRedo.setOnClickListener { performRedo() }
 
         actionNameAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, mutableListOf())
 
@@ -139,6 +150,7 @@ class RecordingActivity : AppCompatActivity() {
         }
         recomputeAllDurations()
         buildFieldMatrix()
+        updateUndoRedoButtons()
     }
 
     private fun addHeaderView() {
@@ -222,7 +234,9 @@ class RecordingActivity : AppCompatActivity() {
         }
 
         actionField.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
+                if (!suppressSnapshotCapture) captureUndoSnapshot()
+            }
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
                 if (binder.isRevertingActionText) return
@@ -282,31 +296,31 @@ class RecordingActivity : AppCompatActivity() {
             }
         }
 
-        commentField.addTextChangedListener(simpleWatcher { text ->
+        commentField.addTextChangedListener(snapshotWatcher(binder) { text ->
             binder.row = binder.row.copy(comment = text)
             persistRow(binder.row)
         })
 
         if (timeEnabled) {
-            timeField?.addTextChangedListener(simpleWatcher { text ->
+            timeField?.addTextChangedListener(snapshotWatcher(binder) { text ->
                 binder.row = binder.row.copy(timeValue = text)
                 persistRow(binder.row)
                 recomputeAllDurations()
             })
-            quanFields.getOrNull(0)?.addTextChangedListener(simpleWatcher { text ->
+            quanFields.getOrNull(0)?.addTextChangedListener(snapshotWatcher(binder) { text ->
                 binder.row = binder.row.copy(quan1 = text)
                 persistRow(binder.row)
             })
         } else {
-            quanFields.getOrNull(0)?.addTextChangedListener(simpleWatcher { text ->
+            quanFields.getOrNull(0)?.addTextChangedListener(snapshotWatcher(binder) { text ->
                 binder.row = binder.row.copy(quan1 = text)
                 persistRow(binder.row)
             })
-            quanFields.getOrNull(1)?.addTextChangedListener(simpleWatcher { text ->
+            quanFields.getOrNull(1)?.addTextChangedListener(snapshotWatcher(binder) { text ->
                 binder.row = binder.row.copy(quan2 = text)
                 persistRow(binder.row)
             })
-            quanFields.getOrNull(2)?.addTextChangedListener(simpleWatcher { text ->
+            quanFields.getOrNull(2)?.addTextChangedListener(snapshotWatcher(binder) { text ->
                 binder.row = binder.row.copy(quan3 = text)
                 persistRow(binder.row)
             })
@@ -417,6 +431,7 @@ class RecordingActivity : AppCompatActivity() {
         if (currentRow < fieldMatrix.size - 1) {
             focusCell(currentRow + 1, currentCol)
         } else {
+            captureUndoSnapshot()
             addNewRow(focusCol = currentCol)
         }
     }
@@ -436,9 +451,11 @@ class RecordingActivity : AppCompatActivity() {
         }
     }
 
-    private fun simpleWatcher(onChanged: (String) -> Unit): TextWatcher {
+    private fun snapshotWatcher(binder: RowBinding, onChanged: (String) -> Unit): TextWatcher {
         return object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
+                if (!suppressSnapshotCapture) captureUndoSnapshot()
+            }
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
                 onChanged(s?.toString() ?: "")
