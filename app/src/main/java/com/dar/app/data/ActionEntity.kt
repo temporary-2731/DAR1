@@ -11,7 +11,10 @@ data class ActionEntity(
     val name: String,
     val description: String = "",
     val imagePath: String? = null,
-    val startDate: String? = null,   // DD/MM/YYYY, null = from the beginning
-    val endDate: String? = null,     // DD/MM/YYYY, null = no end / not deleted
-    val usageFrequency: Int = 0
+    val startDate: String? = null,
+    val endDate: String? = null,
+    val usageFrequency: Int = 0,
+    val createdDate: String = "",
+    val deletedDate: String? = null,
+    val recoveredDate: String? = null
 )
