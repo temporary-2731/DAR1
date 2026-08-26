@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -17,8 +18,12 @@ import com.dar.app.data.GeneralActionEntity
 import com.dar.app.data.SuperActionEntity
 import com.dar.app.data.SuperActionGeneralCrossRef
 import com.dar.app.databinding.FragmentSuperActionListBinding
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class SuperActionListFragment : Fragment() {
 
@@ -54,14 +59,18 @@ class SuperActionListFragment : Fragment() {
         dslaId = arguments?.getLong(ARG_DSLA_ID) ?: -1L
         db = AppDatabase.getInstance(requireContext().applicationContext)
 
-        binding.btnAddSuperAction.setOnClickListener { showCreateSuperActionDialog() }
+        binding.btnAddSuperAction.setOnClickListener { showSuperActionDialog(null) }
 
         observeSuperActions()
     }
 
+    private fun todayString(): String {
+        return SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
+    }
+
     private fun observeSuperActions() {
         viewLifecycleOwner.lifecycleScope.launch {
-            db.superActionDao().getAllForDsla(dslaId).collect { superActions ->
+            db.superActionDao().getActiveForDsla(dslaId).collect { superActions ->
                 renderSuperActionList(superActions)
             }
         }
@@ -74,10 +83,41 @@ class SuperActionListFragment : Fragment() {
             val itemView = LayoutInflater.from(context)
                 .inflate(R.layout.item_super_action, binding.superActionListContainer, false) as TextView
 
-            val status = if (superAction.endDate != null) " (deleted)" else ""
-            itemView.text = "${superAction.name}$status"
+            itemView.text = superAction.name
             itemView.setOnClickListener { showSuperActionDetail(superAction) }
+            itemView.setOnLongClickListener {
+                showItemMenu(
+                    onEdit = { showSuperActionDialog(superAction) },
+                    onDelete = { deleteSuperAction(superAction) }
+                )
+                true
+            }
             binding.superActionListContainer.addView(itemView)
+        }
+    }
+
+    private fun showItemMenu(onEdit: () -> Unit, onDelete: () -> Unit) {
+        val dialogView = LayoutInflater.from(context).inflate(R.layout.dialog_library_item_menu, null)
+        val btnEdit = dialogView.findViewById<Button>(R.id.btn_item_edit)
+        val btnDelete = dialogView.findViewById<Button>(R.id.btn_item_delete)
+
+        val sheet = BottomSheetDialog(requireContext())
+        sheet.setContentView(dialogView)
+
+        btnEdit.setOnClickListener {
+            sheet.dismiss()
+            onEdit()
+        }
+        btnDelete.setOnClickListener {
+            sheet.dismiss()
+            onDelete()
+        }
+        sheet.show()
+    }
+
+    private fun deleteSuperAction(superAction: SuperActionEntity) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            db.superActionDao().softDelete(superAction.id, todayString())
         }
     }
 
@@ -108,26 +148,40 @@ class SuperActionListFragment : Fragment() {
 
             val desc = superAction.description.ifEmpty { getString(R.string.detail_no_description) }
 
-            val message = getString(
-                R.string.super_action_detail_format,
-                superAction.id,
-                superAction.name,
-                desc,
-                generalNames,
-                actionNamesText
+            val builder = StringBuilder()
+            builder.append(
+                getString(
+                    R.string.super_action_detail_format,
+                    superAction.id,
+                    superAction.name,
+                    desc,
+                    generalNames,
+                    actionNamesText
+                )
             )
+            builder.append("\n")
+            builder.append(getString(R.string.label_created, superAction.createdDate.ifEmpty { getString(R.string.detail_none) }))
+            if (superAction.deletedDate != null) {
+                builder.append("\n")
+                builder.append(getString(R.string.label_deleted, superAction.deletedDate))
+            }
+            if (superAction.recoveredDate != null) {
+                builder.append("\n")
+                builder.append(getString(R.string.label_recovered, superAction.recoveredDate))
+            }
+
             AlertDialog.Builder(requireContext())
                 .setTitle(superAction.name)
-                .setMessage(message)
+                .setMessage(builder.toString())
                 .setPositiveButton(R.string.detail_close, null)
                 .show()
         }
     }
 
-    private fun showCreateSuperActionDialog() {
+    private fun showSuperActionDialog(existing: SuperActionEntity?) {
         viewLifecycleOwner.lifecycleScope.launch {
             val allGeneralActions: List<GeneralActionEntity> =
-                db.generalActionDao().getAllForDsla(dslaId).first()
+                db.generalActionDao().getActiveForDsla(dslaId).first()
 
             if (allGeneralActions.size < 2) {
                 Toast.makeText(
@@ -138,17 +192,29 @@ class SuperActionListFragment : Fragment() {
                 return@launch
             }
 
+            val preselectedIds: Set<Long> = if (existing != null) {
+                db.superActionDao().getGeneralActionsInSuper(existing.id).first().map { it.id }.toSet()
+            } else {
+                emptySet()
+            }
+
             val dialogView = LayoutInflater.from(requireContext())
                 .inflate(R.layout.dialog_create_super_action, null)
             val nameField = dialogView.findViewById<EditText>(R.id.edit_super_action_name)
             val descField = dialogView.findViewById<EditText>(R.id.edit_super_action_description)
             val checkboxContainer = dialogView.findViewById<LinearLayout>(R.id.checkbox_container)
 
+            if (existing != null) {
+                nameField.setText(existing.name)
+                descField.setText(existing.description)
+            }
+
             val checkBoxes = mutableListOf<Pair<CheckBox, GeneralActionEntity>>()
             for (generalAction in allGeneralActions) {
                 val checkBox = CheckBox(requireContext())
                 checkBox.text = generalAction.name
                 checkBox.setTextColor(android.graphics.Color.BLACK)
+                checkBox.isChecked = preselectedIds.contains(generalAction.id)
                 checkboxContainer.addView(checkBox)
                 checkBoxes.add(checkBox to generalAction)
             }
@@ -172,7 +238,7 @@ class SuperActionListFragment : Fragment() {
                             ).show()
                         }
                         else -> {
-                            validateAndSave(name, description, selectedGenerals)
+                            validateAndSave(existing, name, description, selectedGenerals)
                         }
                     }
                 }
@@ -181,7 +247,12 @@ class SuperActionListFragment : Fragment() {
         }
     }
 
-    private fun validateAndSave(name: String, description: String, selectedGenerals: List<GeneralActionEntity>) {
+    private fun validateAndSave(
+        existing: SuperActionEntity?,
+        name: String,
+        description: String,
+        selectedGenerals: List<GeneralActionEntity>
+    ) {
         viewLifecycleOwner.lifecycleScope.launch {
             val actionSets = selectedGenerals.map { generalAction ->
                 db.generalActionDao().getActionsInGeneral(generalAction.id).first()
@@ -202,23 +273,45 @@ class SuperActionListFragment : Fragment() {
                 }
             }
 
-            saveSuperAction(name, description, selectedGenerals)
+            val allSupers = db.superActionDao().getAllForDsla(dslaId).first()
+            val duplicate = allSupers.any {
+                it.name.equals(name, ignoreCase = true) && it.id != (existing?.id ?: -1L)
+            }
+            if (duplicate) {
+                Toast.makeText(requireContext(), R.string.super_action_name_duplicate, Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+
+            saveSuperAction(existing, name, description, selectedGenerals)
         }
     }
 
-    private fun saveSuperAction(name: String, description: String, selectedGenerals: List<GeneralActionEntity>) {
+    private fun saveSuperAction(
+        existing: SuperActionEntity?,
+        name: String,
+        description: String,
+        selectedGenerals: List<GeneralActionEntity>
+    ) {
         viewLifecycleOwner.lifecycleScope.launch {
-            val newId = db.superActionDao().insert(
-                SuperActionEntity(
-                    dslaId = dslaId,
-                    name = name,
-                    description = description
+            val id: Long
+            if (existing == null) {
+                id = db.superActionDao().insert(
+                    SuperActionEntity(
+                        dslaId = dslaId,
+                        name = name,
+                        description = description,
+                        createdDate = todayString()
+                    )
                 )
-            )
+            } else {
+                id = existing.id
+                db.superActionDao().update(existing.copy(name = name, description = description))
+                db.superActionDao().clearGeneralsForSuper(id)
+            }
             for (generalAction in selectedGenerals) {
                 db.superActionDao().addGeneralToSuper(
                     SuperActionGeneralCrossRef(
-                        superActionId = newId,
+                        superActionId = id,
                         generalActionId = generalAction.id
                     )
                 )
