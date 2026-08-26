@@ -107,4 +107,6 @@
     <string name="selection_hint">Tap another cell to extend selection</string>
     <string name="selection_paste_skipped">Some cells were skipped (incompatible type)</string>
     <string name="row_selection_hint">Tap other row numbers to add them to the selection</string>
+    <string name="save_missing_action">Row %1$d is missing an Action</string>
+    <string name="save_missing_time">Row %1$d is missing a Time value</string>
 </resources>
