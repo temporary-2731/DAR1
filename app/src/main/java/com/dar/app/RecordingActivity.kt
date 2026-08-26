@@ -41,7 +41,6 @@ class RecordingActivity : AppCompatActivity() {
     var currentRow = 0
     var currentCol = 0
 
-    // Multi-cell selection state
     var selectionActive = false
     var anchorRow = -1
     var anchorCol = -1
@@ -50,12 +49,10 @@ class RecordingActivity : AppCompatActivity() {
     val highlightedFields = mutableListOf<EditText>()
     var needsNewAnchor = false
 
-    // Whole-row selection state
     var rowSelectionActive = false
     val selectedRowIndices = mutableSetOf<Int>()
     var rowSelectionNeedsNewAnchor = false
 
-    // Undo/Redo stacks
     val undoStack = ArrayDeque<RecordingSnapshot>()
     val redoStack = ArrayDeque<RecordingSnapshot>()
     var suppressSnapshotCapture = false
@@ -477,8 +474,6 @@ class RecordingActivity : AppCompatActivity() {
         }
     }
 
-    /** Validates every row before allowing the screen to close. Action is always required;
-     *  Time is required only when the DSLA has time enabled. */
     private fun attemptSave() {
         for ((index, binder) in rowBindings.withIndex()) {
             val rowNumber = index + 1
@@ -493,6 +488,21 @@ class RecordingActivity : AppCompatActivity() {
                 return
             }
         }
+
+        for (i in 0 until rowBindings.size - 1) {
+            val current = rowBindings[i].row.actionName
+            val next = rowBindings[i + 1].row.actionName
+            if (current.isNotBlank() && current.equals(next, ignoreCase = true)) {
+                Toast.makeText(
+                    this,
+                    getString(R.string.recording_consecutive_action_error, i + 1, i + 2),
+                    Toast.LENGTH_LONG
+                ).show()
+                focusCell(i, 0)
+                return
+            }
+        }
+
         finish()
     }
 
