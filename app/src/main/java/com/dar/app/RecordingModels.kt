@@ -6,6 +6,7 @@ import android.widget.TextView
 import com.dar.app.data.RecordingRow
 
 const val RECORDING_HIGHLIGHT_COLOR = 0xFFFFE082.toInt()
+const val UNDO_STACK_LIMIT = 50
 
 enum class FieldType { ACTION, TIME, QUAN1, QUAN2, QUAN3, COMMENT }
 
@@ -27,6 +28,9 @@ data class RowSnapshot(
     val quan3: String,
     val comment: String
 )
+
+/** A full snapshot of every row's data for a given date, used to restore state on Undo/Redo. */
+data class RecordingSnapshot(val rows: List<RecordingRow>)
 
 sealed class ClipboardContent {
     data class Cell(val category: CellCategory, val value: String) : ClipboardContent()
