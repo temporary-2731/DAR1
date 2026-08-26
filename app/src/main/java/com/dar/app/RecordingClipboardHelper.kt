@@ -282,6 +282,7 @@ fun RecordingActivity.shiftColumnUp(fieldType: FieldType, startRow: Int, count: 
 // ---------- Add Row / Add Cell (insert-and-shift) ----------
 
 fun RecordingActivity.insertRowAfter(binder: RowBinding) {
+    captureUndoSnapshot()
     lifecycleScope.launch {
         val insertPosition = binder.row.rowNumber
         val allRows = db.recordingDao().getRowsForDate(dslaId, todayDate)
@@ -299,6 +300,7 @@ fun RecordingActivity.insertRowAfter(binder: RowBinding) {
 }
 
 fun RecordingActivity.insertCellAt(fieldType: FieldType, insertRowIndex: Int) {
+    captureUndoSnapshot()
     val currentValues = rowBindings.map { getFieldValue(it, fieldType) }
     val lastValue = currentValues.lastOrNull() ?: ""
     val needsOverflowRow = lastValue.isNotEmpty()
@@ -333,6 +335,7 @@ private fun RecordingActivity.performColumnInsert(
 
 /** Physically deletes a single row and renumbers everything below it up by one. */
 fun RecordingActivity.removeRow(binder: RowBinding) {
+    captureUndoSnapshot()
     lifecycleScope.launch {
         val removedNumber = binder.row.rowNumber
         db.recordingDao().delete(binder.row)
@@ -383,18 +386,21 @@ fun RecordingActivity.showCellMenu(binder: RowBinding, fieldType: FieldType, row
         sheet.dismiss()
     }
     btnCut.setOnClickListener {
+        captureUndoSnapshot()
         clipboard = ClipboardContent.Cell(category, getFieldValue(binder, fieldType))
         shiftColumnUp(fieldType, rowIndex, 1)
         Toast.makeText(this, R.string.recording_cut, Toast.LENGTH_SHORT).show()
         sheet.dismiss()
     }
     btnDelete.setOnClickListener {
+        captureUndoSnapshot()
         shiftColumnUp(fieldType, rowIndex, 1)
         sheet.dismiss()
     }
     btnPaste.setOnClickListener {
         val currentClip = clipboard
         if (currentClip is ClipboardContent.Cell && currentClip.category == category) {
+            captureUndoSnapshot()
             setFieldValue(binder, fieldType, currentClip.value)
         }
         sheet.dismiss()
@@ -486,12 +492,14 @@ fun RecordingActivity.showRowMenu(binder: RowBinding, rowIndex: Int) {
         sheet.dismiss()
     }
     btnCutRow.setOnClickListener {
+        captureUndoSnapshot()
         clipboard = rowToClipboard(binder)
         clearRow(binder)
         Toast.makeText(this, R.string.recording_cut, Toast.LENGTH_SHORT).show()
         sheet.dismiss()
     }
     btnDeleteRow.setOnClickListener {
+        captureUndoSnapshot()
         clearRow(binder)
         sheet.dismiss()
     }
@@ -502,6 +510,7 @@ fun RecordingActivity.showRowMenu(binder: RowBinding, rowIndex: Int) {
     btnPasteRow.setOnClickListener {
         val clip = clipboard
         if (clip is ClipboardContent.Row) {
+            captureUndoSnapshot()
             applyRowClipboard(binder, clip)
         }
         sheet.dismiss()
