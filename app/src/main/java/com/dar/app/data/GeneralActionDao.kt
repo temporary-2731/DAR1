@@ -18,8 +18,17 @@ interface GeneralActionDao {
     @Delete
     suspend fun removeActionFromGeneral(crossRef: GeneralActionActionCrossRef)
 
+    @Query("DELETE FROM general_action_action_cross_ref WHERE generalActionId = :generalActionId")
+    suspend fun clearActionsForGeneral(generalActionId: Long)
+
     @Query("SELECT * FROM general_action WHERE dslaId = :dslaId ORDER BY id ASC")
     fun getAllForDsla(dslaId: Long): Flow<List<GeneralActionEntity>>
+
+    @Query("SELECT * FROM general_action WHERE dslaId = :dslaId AND endDate IS NULL ORDER BY id ASC")
+    fun getActiveForDsla(dslaId: Long): Flow<List<GeneralActionEntity>>
+
+    @Query("SELECT * FROM general_action WHERE dslaId = :dslaId AND endDate IS NOT NULL ORDER BY id ASC")
+    fun getDeletedForDsla(dslaId: Long): Flow<List<GeneralActionEntity>>
 
     @Query("""
         SELECT action.* FROM action
@@ -29,9 +38,9 @@ interface GeneralActionDao {
     """)
     fun getActionsInGeneral(generalActionId: Long): Flow<List<ActionEntity>>
 
-    @Query("UPDATE general_action SET endDate = :today WHERE id = :generalActionId")
+    @Query("UPDATE general_action SET endDate = :today, deletedDate = :today WHERE id = :generalActionId")
     suspend fun softDelete(generalActionId: Long, today: String)
 
-    @Query("UPDATE general_action SET endDate = NULL WHERE id = :generalActionId")
-    suspend fun recover(generalActionId: Long)
+    @Query("UPDATE general_action SET endDate = NULL, recoveredDate = :today WHERE id = :generalActionId")
+    suspend fun recover(generalActionId: Long, today: String)
 }
