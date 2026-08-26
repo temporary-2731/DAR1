@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -17,8 +18,12 @@ import com.dar.app.data.AppDatabase
 import com.dar.app.data.GeneralActionActionCrossRef
 import com.dar.app.data.GeneralActionEntity
 import com.dar.app.databinding.FragmentGeneralActionListBinding
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class GeneralActionListFragment : Fragment() {
 
@@ -54,14 +59,18 @@ class GeneralActionListFragment : Fragment() {
         dslaId = arguments?.getLong(ARG_DSLA_ID) ?: -1L
         db = AppDatabase.getInstance(requireContext().applicationContext)
 
-        binding.btnAddGeneralAction.setOnClickListener { showCreateGeneralActionDialog() }
+        binding.btnAddGeneralAction.setOnClickListener { showGeneralActionDialog(null) }
 
         observeGeneralActions()
     }
 
+    private fun todayString(): String {
+        return SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
+    }
+
     private fun observeGeneralActions() {
         viewLifecycleOwner.lifecycleScope.launch {
-            db.generalActionDao().getAllForDsla(dslaId).collect { generalActions ->
+            db.generalActionDao().getActiveForDsla(dslaId).collect { generalActions ->
                 renderGeneralActionList(generalActions)
             }
         }
@@ -74,10 +83,41 @@ class GeneralActionListFragment : Fragment() {
             val itemView = LayoutInflater.from(context)
                 .inflate(R.layout.item_general_action, binding.generalActionListContainer, false) as TextView
 
-            val status = if (generalAction.endDate != null) " (deleted)" else ""
-            itemView.text = "${generalAction.name}$status"
+            itemView.text = generalAction.name
             itemView.setOnClickListener { showGeneralActionDetail(generalAction) }
+            itemView.setOnLongClickListener {
+                showItemMenu(
+                    onEdit = { showGeneralActionDialog(generalAction) },
+                    onDelete = { deleteGeneralAction(generalAction) }
+                )
+                true
+            }
             binding.generalActionListContainer.addView(itemView)
+        }
+    }
+
+    private fun showItemMenu(onEdit: () -> Unit, onDelete: () -> Unit) {
+        val dialogView = LayoutInflater.from(context).inflate(R.layout.dialog_library_item_menu, null)
+        val btnEdit = dialogView.findViewById<Button>(R.id.btn_item_edit)
+        val btnDelete = dialogView.findViewById<Button>(R.id.btn_item_delete)
+
+        val sheet = BottomSheetDialog(requireContext())
+        sheet.setContentView(dialogView)
+
+        btnEdit.setOnClickListener {
+            sheet.dismiss()
+            onEdit()
+        }
+        btnDelete.setOnClickListener {
+            sheet.dismiss()
+            onDelete()
+        }
+        sheet.show()
+    }
+
+    private fun deleteGeneralAction(generalAction: GeneralActionEntity) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            db.generalActionDao().softDelete(generalAction.id, todayString())
         }
     }
 
@@ -93,24 +133,38 @@ class GeneralActionListFragment : Fragment() {
             }
             val desc = generalAction.description.ifEmpty { getString(R.string.detail_no_description) }
 
-            val message = getString(
-                R.string.general_action_detail_format,
-                generalAction.id,
-                generalAction.name,
-                desc,
-                memberNames
+            val builder = StringBuilder()
+            builder.append(
+                getString(
+                    R.string.general_action_detail_format,
+                    generalAction.id,
+                    generalAction.name,
+                    desc,
+                    memberNames
+                )
             )
+            builder.append("\n")
+            builder.append(getString(R.string.label_created, generalAction.createdDate.ifEmpty { getString(R.string.detail_none) }))
+            if (generalAction.deletedDate != null) {
+                builder.append("\n")
+                builder.append(getString(R.string.label_deleted, generalAction.deletedDate))
+            }
+            if (generalAction.recoveredDate != null) {
+                builder.append("\n")
+                builder.append(getString(R.string.label_recovered, generalAction.recoveredDate))
+            }
+
             AlertDialog.Builder(requireContext())
                 .setTitle(generalAction.name)
-                .setMessage(message)
+                .setMessage(builder.toString())
                 .setPositiveButton(R.string.detail_close, null)
                 .show()
         }
     }
 
-    private fun showCreateGeneralActionDialog() {
+    private fun showGeneralActionDialog(existing: GeneralActionEntity?) {
         viewLifecycleOwner.lifecycleScope.launch {
-            val allActions: List<ActionEntity> = db.actionDao().getAllForDsla(dslaId).first()
+            val allActions: List<ActionEntity> = db.actionDao().getActiveForDsla(dslaId).first()
 
             if (allActions.size < 2) {
                 Toast.makeText(
@@ -121,17 +175,29 @@ class GeneralActionListFragment : Fragment() {
                 return@launch
             }
 
+            val preselectedIds: Set<Long> = if (existing != null) {
+                db.generalActionDao().getActionsInGeneral(existing.id).first().map { it.id }.toSet()
+            } else {
+                emptySet()
+            }
+
             val dialogView = LayoutInflater.from(requireContext())
                 .inflate(R.layout.dialog_create_general_action, null)
             val nameField = dialogView.findViewById<EditText>(R.id.edit_general_action_name)
             val descField = dialogView.findViewById<EditText>(R.id.edit_general_action_description)
             val checkboxContainer = dialogView.findViewById<LinearLayout>(R.id.checkbox_container)
 
+            if (existing != null) {
+                nameField.setText(existing.name)
+                descField.setText(existing.description)
+            }
+
             val checkBoxes = mutableListOf<Pair<CheckBox, ActionEntity>>()
             for (action in allActions) {
                 val checkBox = CheckBox(requireContext())
                 checkBox.text = action.name
                 checkBox.setTextColor(android.graphics.Color.BLACK)
+                checkBox.isChecked = preselectedIds.contains(action.id)
                 checkboxContainer.addView(checkBox)
                 checkBoxes.add(checkBox to action)
             }
@@ -152,7 +218,17 @@ class GeneralActionListFragment : Fragment() {
                             Toast.LENGTH_SHORT
                         ).show()
                     } else {
-                        saveGeneralAction(name, description, selectedActions)
+                        viewLifecycleOwner.lifecycleScope.launch {
+                            val allGenerals = db.generalActionDao().getAllForDsla(dslaId).first()
+                            val duplicate = allGenerals.any {
+                                it.name.equals(name, ignoreCase = true) && it.id != (existing?.id ?: -1L)
+                            }
+                            if (duplicate) {
+                                Toast.makeText(requireContext(), R.string.general_action_name_duplicate, Toast.LENGTH_SHORT).show()
+                                return@launch
+                            }
+                            saveGeneralAction(existing, name, description, selectedActions)
+                        }
                     }
                 }
                 .setNegativeButton(R.string.general_action_cancel, null)
@@ -160,19 +236,32 @@ class GeneralActionListFragment : Fragment() {
         }
     }
 
-    private fun saveGeneralAction(name: String, description: String, selectedActions: List<ActionEntity>) {
+    private fun saveGeneralAction(
+        existing: GeneralActionEntity?,
+        name: String,
+        description: String,
+        selectedActions: List<ActionEntity>
+    ) {
         viewLifecycleOwner.lifecycleScope.launch {
-            val newId = db.generalActionDao().insert(
-                GeneralActionEntity(
-                    dslaId = dslaId,
-                    name = name,
-                    description = description
+            val id: Long
+            if (existing == null) {
+                id = db.generalActionDao().insert(
+                    GeneralActionEntity(
+                        dslaId = dslaId,
+                        name = name,
+                        description = description,
+                        createdDate = todayString()
+                    )
                 )
-            )
+            } else {
+                id = existing.id
+                db.generalActionDao().update(existing.copy(name = name, description = description))
+                db.generalActionDao().clearActionsForGeneral(id)
+            }
             for (action in selectedActions) {
                 db.generalActionDao().addActionToGeneral(
                     GeneralActionActionCrossRef(
-                        generalActionId = newId,
+                        generalActionId = id,
                         actionId = action.id
                     )
                 )
