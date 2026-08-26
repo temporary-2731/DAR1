@@ -73,6 +73,8 @@
     <string name="arrow_up">▲</string>
     <string name="arrow_down">▼</string>
     <string name="arrow_right">▶</string>
+    <string name="undo_button">↶ Undo</string>
+    <string name="redo_button">↷ Redo</string>
     <string name="cell_menu_select">Select</string>
     <string name="cell_menu_copy">Copy</string>
     <string name="cell_menu_cut">Cut</string>
