@@ -11,5 +11,8 @@ data class SuperActionEntity(
     val name: String,
     val description: String = "",
     val startDate: String? = null,
-    val endDate: String? = null
+    val endDate: String? = null,
+    val createdDate: String = "",
+    val deletedDate: String? = null,
+    val recoveredDate: String? = null
 )
