@@ -56,7 +56,9 @@ class RowBinding(
     val quanFields: List<EditText>,
     val commentField: EditText,
     var committedActionName: String,
-    var isRevertingActionText: Boolean = false
+    var isRevertingActionText: Boolean = false,
+    var committedTimeValue: String = "",
+    var isRevertingTimeText: Boolean = false
 )
 
 fun categoryOf(fieldType: FieldType): CellCategory = when (fieldType) {
