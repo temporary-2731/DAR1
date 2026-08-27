@@ -75,6 +75,40 @@
             android:inputType="date"
             android:hint="@string/dsla_end_hint" />
 
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/dsla_analysis_mode_label"
+            android:textSize="16sp"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="8dp" />
+
+        <RadioGroup
+            android:id="@+id/radio_analysis_mode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <RadioButton
+                android:id="@+id/radio_mode1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/dsla_analysis_mode1"
+                android:checked="true" />
+
+            <RadioButton
+                android:id="@+id/radio_mode2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/dsla_analysis_mode2" />
+
+            <RadioButton
+                android:id="@+id/radio_mode_manual"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/dsla_analysis_mode_manual" />
+
+        </RadioGroup>
+
     </LinearLayout>
 
 </ScrollView>
