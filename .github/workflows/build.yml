@@ -23,6 +23,9 @@ jobs:
         with:
           gradle-version: 8.7
 
+      - name: Restore fixed debug keystore
+        run: base64 -d app/debug_keystore_base64.txt > app/debug.keystore
+
       - name: Build debug APK
         run: gradle assembleDebug
 
