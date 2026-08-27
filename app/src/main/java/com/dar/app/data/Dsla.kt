@@ -8,5 +8,7 @@ data class Dsla(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val name: String,
-    val timeEnabled: Boolean = true
+    val timeEnabled: Boolean = true,
+    val beginDate: String = "",   // DD/MM/YYYY, fixed at creation (defaults to creation day if left blank)
+    val endDate: String? = null   // DD/MM/YYYY, null = ongoing indefinitely
 )
