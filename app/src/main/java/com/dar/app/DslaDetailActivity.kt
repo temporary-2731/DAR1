@@ -5,6 +5,9 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.dar.app.databinding.ActivityDslaDetailBinding
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class DslaDetailActivity : AppCompatActivity() {
 
@@ -31,13 +34,23 @@ class DslaDetailActivity : AppCompatActivity() {
         binding.btnLibrary.setOnClickListener { openLibrary() }
         binding.btnAnalysis.setOnClickListener { sectionComingSoon("Analysis") }
         binding.btnReport.setOnClickListener { sectionComingSoon("Report") }
-        binding.btnHistory.setOnClickListener { sectionComingSoon("History") }
+        binding.btnHistory.setOnClickListener { openHistory() }
         binding.btnTools.setOnClickListener { sectionComingSoon("Tools") }
     }
 
     private fun openRecording() {
         val intent = Intent(this, RecordingActivity::class.java).apply {
             putExtra(RecordingActivity.EXTRA_DSLA_ID, dslaId)
+        }
+        startActivity(intent)
+    }
+
+    private fun openHistory() {
+        val today = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
+        val intent = Intent(this, RecordingActivity::class.java).apply {
+            putExtra(RecordingActivity.EXTRA_DSLA_ID, dslaId)
+            putExtra(RecordingActivity.EXTRA_MODE, "HISTORY")
+            putExtra(RecordingActivity.EXTRA_TARGET_DATE, today)
         }
         startActivity(intent)
     }
