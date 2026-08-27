@@ -38,6 +38,9 @@ class RecordingActivity : AppCompatActivity() {
     var mode: RecordingMode = RecordingMode.RECORDING
     var isEditable: Boolean = true
 
+    var dslaBeginDate: String = ""
+    var dslaEndDate: String? = null
+
     var libraryActions: List<ActionEntity> = emptyList()
     lateinit var actionNameAdapter: ArrayAdapter<String>
     var clipboard: ClipboardContent? = null
@@ -67,6 +70,7 @@ class RecordingActivity : AppCompatActivity() {
         const val EXTRA_DSLA_ID = "extra_dsla_id"
         const val EXTRA_MODE = "extra_mode"
         const val EXTRA_TARGET_DATE = "extra_target_date"
+        private const val DATE_FORMAT = "dd/MM/yyyy"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -77,14 +81,14 @@ class RecordingActivity : AppCompatActivity() {
         dslaId = intent.getLongExtra(EXTRA_DSLA_ID, -1L)
         db = AppDatabase.getInstance(applicationContext)
 
+        val sdf = SimpleDateFormat(DATE_FORMAT, Locale.getDefault())
+        val passedDate = intent.getStringExtra(EXTRA_TARGET_DATE)
         mode = if (intent.getStringExtra(EXTRA_MODE) == "HISTORY") {
             RecordingMode.HISTORY
         } else {
             RecordingMode.RECORDING
         }
 
-        val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-        val passedDate = intent.getStringExtra(EXTRA_TARGET_DATE)
         todayDate = if (mode == RecordingMode.HISTORY) {
             passedDate ?: sdf.format(Date())
         } else {
@@ -140,7 +144,6 @@ class RecordingActivity : AppCompatActivity() {
             binding.btnDateNext.visibility = View.VISIBLE
             binding.btnCancel.visibility = View.GONE
             binding.btnSave.text = getString(R.string.history_close)
-            updateDateNavButtons()
         } else {
             binding.historyTopBar.visibility = View.GONE
             binding.btnDatePrev.visibility = View.GONE
@@ -158,9 +161,15 @@ class RecordingActivity : AppCompatActivity() {
         }
     }
 
+    /** Toggling Edit on for a day with zero rows auto-creates a first blank row,
+     *  the same way Recording always guarantees at least one row to type into. */
     private fun toggleEdit() {
         isEditable = !isEditable
-        applyEditableStateToFields()
+        if (isEditable && rowBindings.isEmpty()) {
+            loadRowsForCurrentDate()
+        } else {
+            applyEditableStateToFields()
+        }
     }
 
     private fun applyEditableStateToFields() {
@@ -181,29 +190,49 @@ class RecordingActivity : AppCompatActivity() {
     }
 
     private fun updateDateHeaderText() {
-        val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+        val sdf = SimpleDateFormat(DATE_FORMAT, Locale.getDefault())
         val parsed = sdf.parse(todayDate) ?: Date()
         val dayName = SimpleDateFormat("EEEE", Locale.getDefault()).format(parsed)
         binding.dateHeader.text = "$todayDate  $dayName"
     }
 
+    private fun upperBoundDate(): Date {
+        val sdf = SimpleDateFormat(DATE_FORMAT, Locale.getDefault())
+        val today = sdf.parse(sdf.format(Date())) ?: Date()
+        val end = dslaEndDate?.let { sdf.parse(it) }
+        return if (end != null && end.before(today)) end else today
+    }
+
+    private fun lowerBoundDate(): Date {
+        val sdf = SimpleDateFormat(DATE_FORMAT, Locale.getDefault())
+        return sdf.parse(dslaBeginDate) ?: sdf.parse(sdf.format(Date())) ?: Date()
+    }
+
     private fun updateDateNavButtons() {
-        val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-        val current = sdf.parse(todayDate)
-        val today = sdf.parse(sdf.format(Date()))
-        val atToday = current != null && today != null && !current.before(today)
-        binding.btnDateNext.isEnabled = !atToday
-        binding.btnDateNext.alpha = if (atToday) 0.4f else 1f
+        val sdf = SimpleDateFormat(DATE_FORMAT, Locale.getDefault())
+        val current = sdf.parse(todayDate) ?: Date()
+        val upper = upperBoundDate()
+        val lower = lowerBoundDate()
+
+        val atUpper = !current.before(upper)
+        val atLower = !current.after(lower)
+
+        binding.btnDateNext.isEnabled = !atUpper
+        binding.btnDateNext.alpha = if (atUpper) 0.4f else 1f
+        binding.btnDatePrev.isEnabled = !atLower
+        binding.btnDatePrev.alpha = if (atLower) 0.4f else 1f
     }
 
     private fun navigateDate(deltaDays: Int) {
-        val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+        val sdf = SimpleDateFormat(DATE_FORMAT, Locale.getDefault())
         val cal = Calendar.getInstance()
         cal.time = sdf.parse(todayDate) ?: Date()
         cal.add(Calendar.DAY_OF_MONTH, deltaDays)
         val newDate = cal.time
-        val today = sdf.parse(sdf.format(Date())) ?: Date()
-        if (newDate.after(today)) return
+
+        val upper = upperBoundDate()
+        val lower = lowerBoundDate()
+        if (newDate.after(upper) || newDate.before(lower)) return
 
         todayDate = sdf.format(newDate)
         undoStack.clear()
@@ -225,19 +254,50 @@ class RecordingActivity : AppCompatActivity() {
             val dsla = db.dslaDao().getById(dslaId)
             timeEnabled = dsla?.timeEnabled ?: true
 
+            val sdf = SimpleDateFormat(DATE_FORMAT, Locale.getDefault())
+            dslaBeginDate = dsla?.beginDate?.ifEmpty { sdf.format(Date()) } ?: sdf.format(Date())
+            dslaEndDate = dsla?.endDate
+
+            if (mode == RecordingMode.RECORDING) {
+                val end = dslaEndDate
+                if (end != null) {
+                    val endParsed = sdf.parse(end)
+                    val today = sdf.parse(sdf.format(Date()))
+                    if (endParsed != null && today != null && endParsed.before(today)) {
+                        Toast.makeText(
+                            this@RecordingActivity,
+                            getString(R.string.recording_dsla_ended_message, end),
+                            Toast.LENGTH_LONG
+                        ).show()
+                        finish()
+                        return@launch
+                    }
+                }
+            }
+
             libraryActions = db.actionDao().getActiveSortedByFrequency(dslaId).first()
             actionNameAdapter.clear()
             actionNameAdapter.addAll(libraryActions.map { it.name })
             actionNameAdapter.notifyDataSetChanged()
 
+            if (mode == RecordingMode.HISTORY) {
+                updateDateNavButtons()
+            }
+
             loadRowsForCurrentDate()
         }
     }
 
+    /** Fetches rows for the current date. Auto-creates a first blank row when
+     *  in Recording mode, or in History mode while Edit is active — matching
+     *  Recording's guarantee that there's always at least one row to type into. */
     private fun loadRowsForCurrentDate() {
         lifecycleScope.launch {
             var rows = db.recordingDao().getRowsForDate(dslaId, todayDate)
-            if (rows.isEmpty() && mode == RecordingMode.RECORDING) {
+            val shouldAutoCreate = rows.isEmpty() &&
+                (mode == RecordingMode.RECORDING || (mode == RecordingMode.HISTORY && isEditable))
+
+            if (shouldAutoCreate) {
                 db.recordingDao().insert(
                     RecordingRow(dslaId = dslaId, date = todayDate, rowNumber = 1)
                 )
