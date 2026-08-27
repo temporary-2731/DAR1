@@ -1,5 +1,6 @@
 package com.dar.app
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -70,6 +71,8 @@ class RecordingActivity : AppCompatActivity() {
         const val EXTRA_DSLA_ID = "extra_dsla_id"
         const val EXTRA_MODE = "extra_mode"
         const val EXTRA_TARGET_DATE = "extra_target_date"
+        const val RESULT_EXTRA_DATE = "result_extra_date"
+        private const val REQUEST_HIGHLIGHT = 501
         private const val DATE_FORMAT = "dd/MM/yyyy"
     }
 
@@ -103,7 +106,7 @@ class RecordingActivity : AppCompatActivity() {
             captureUndoSnapshot()
             addNewRow()
         }
-        binding.btnSave.setOnClickListener { attemptSave() }
+        binding.btnSave.setOnClickListener { attemptCloseOrSave() }
         binding.btnCancel.setOnClickListener { confirmCancel() }
 
         binding.btnArrowLeft.setOnClickListener { moveLeft() }
@@ -126,7 +129,7 @@ class RecordingActivity : AppCompatActivity() {
         binding.btnUndo.setOnClickListener { performUndo() }
         binding.btnRedo.setOnClickListener { performRedo() }
 
-        binding.btnEditToggle.setOnClickListener { toggleEdit() }
+        binding.btnEditToggle.setOnClickListener { attemptToggleEdit() }
         binding.btnHighlightMode.setOnClickListener { openHighlightMode() }
         binding.btnDatePrev.setOnClickListener { navigateDate(-1) }
         binding.btnDateNext.setOnClickListener { navigateDate(1) }
@@ -137,6 +140,22 @@ class RecordingActivity : AppCompatActivity() {
         loadInitialConfig()
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_HIGHLIGHT && resultCode == Activity.RESULT_OK) {
+            val chosenDate = data?.getStringExtra(RESULT_EXTRA_DATE)
+            if (chosenDate != null) {
+                todayDate = chosenDate
+                undoStack.clear()
+                redoStack.clear()
+                isEditable = false
+                updateDateHeaderText()
+                updateDateNavButtons()
+                loadRowsForCurrentDate()
+            }
+        }
+    }
+
     private fun applyModeUi() {
         if (mode == RecordingMode.HISTORY) {
             binding.historyTopBar.visibility = View.VISIBLE
@@ -144,12 +163,14 @@ class RecordingActivity : AppCompatActivity() {
             binding.btnDateNext.visibility = View.VISIBLE
             binding.btnCancel.visibility = View.GONE
             binding.btnSave.text = getString(R.string.history_close)
+            binding.totalDurationText.visibility = if (timeEnabled) View.VISIBLE else View.GONE
         } else {
             binding.historyTopBar.visibility = View.GONE
             binding.btnDatePrev.visibility = View.GONE
             binding.btnDateNext.visibility = View.GONE
             binding.btnCancel.visibility = View.VISIBLE
             binding.btnSave.text = getString(R.string.recording_save)
+            binding.totalDurationText.visibility = if (timeEnabled) View.VISIBLE else View.GONE
         }
     }
 
@@ -161,12 +182,19 @@ class RecordingActivity : AppCompatActivity() {
         }
     }
 
-    private fun toggleEdit() {
-        isEditable = !isEditable
-        if (isEditable && rowBindings.isEmpty()) {
-            loadRowsForCurrentDate()
-        } else {
+    /** "Done Editing" now runs the same full validation Save does, before allowing the toggle off. */
+    private fun attemptToggleEdit() {
+        if (isEditable) {
+            if (!validateRows()) return
+            isEditable = false
             applyEditableStateToFields()
+        } else {
+            isEditable = true
+            if (rowBindings.isEmpty()) {
+                loadRowsForCurrentDate()
+            } else {
+                applyEditableStateToFields()
+            }
         }
     }
 
@@ -244,7 +272,7 @@ class RecordingActivity : AppCompatActivity() {
         val intent = Intent(this, HighlightModeActivity::class.java).apply {
             putExtra(HighlightModeActivity.EXTRA_DSLA_ID, dslaId)
         }
-        startActivity(intent)
+        startActivityForResult(intent, REQUEST_HIGHLIGHT)
     }
 
     private fun loadInitialConfig() {
@@ -277,6 +305,8 @@ class RecordingActivity : AppCompatActivity() {
             actionNameAdapter.clear()
             actionNameAdapter.addAll(libraryActions.map { it.name })
             actionNameAdapter.notifyDataSetChanged()
+
+            applyModeUi()
 
             if (mode == RecordingMode.HISTORY) {
                 updateDateNavButtons()
@@ -475,6 +505,9 @@ class RecordingActivity : AppCompatActivity() {
         })
 
         if (timeEnabled) {
+            // Real-time: only reject an out-of-range minute value. Ordering against the
+            // previous row is validated on focus loss below, so typing "1" toward "12"
+            // isn't blocked mid-keystroke against a larger previous-row time.
             timeField?.addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
                     if (!suppressSnapshotCapture) captureUndoSnapshot()
@@ -482,9 +515,48 @@ class RecordingActivity : AppCompatActivity() {
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
                 override fun afterTextChanged(s: Editable?) {
                     if (binder.isRevertingTimeText) return
-                    handleTimeInput(binder, thisRowIndex, timeField, s?.toString() ?: "")
+                    val newText = s?.toString() ?: ""
+
+                    if (newText.isEmpty()) {
+                        binder.row = binder.row.copy(timeValue = "")
+                        persistRow(binder.row)
+                        recomputeAllDurations()
+                        return
+                    }
+
+                    val minutesCheck = parseTimeToMinutes(newText)
+                    if (minutesCheck == null && newText.contains(".")) {
+                        val afterDot = newText.substringAfter(".")
+                        if (afterDot.length >= 2) {
+                            binder.isRevertingTimeText = true
+                            val revertTo = binder.row.timeValue
+                            timeField.setText(revertTo)
+                            timeField.setSelection(revertTo.length)
+                            binder.isRevertingTimeText = false
+                            Toast.makeText(
+                                this@RecordingActivity,
+                                getString(R.string.recording_time_invalid_minutes, thisRowIndex + 1),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            return
+                        }
+                    }
+
+                    binder.row = binder.row.copy(timeValue = newText)
+                    persistRow(binder.row)
+                    recomputeAllDurations()
                 }
             })
+
+            timeField?.setOnFocusChangeListener { _, hasFocus ->
+                if (hasFocus) {
+                    currentRow = thisRowIndex
+                    currentCol = fieldMatrix.getOrNull(thisRowIndex)?.indexOf(timeField) ?: 0
+                } else {
+                    validateTimeOnFocusLoss(binder, thisRowIndex, timeField)
+                }
+            }
+
             quanFields.getOrNull(0)?.addTextChangedListener(snapshotWatcher(binder) { text ->
                 binder.row = binder.row.copy(quan1 = text)
                 persistRow(binder.row)
@@ -554,36 +626,25 @@ class RecordingActivity : AppCompatActivity() {
         binding.rowContainer.addView(rowView)
     }
 
-    /**
-     * Validates a Time cell in real time, mirroring the Action field's strict-block pattern:
-     * - Blank is always allowed (clears the cell).
-     * - A value whose minute component is outside [00,59) is rejected immediately.
-     * - (24-hour mode) A value not strictly later than the previous row's committed time
-     *   is rejected immediately. 12-hour wraparound is deferred until the format toggle
-     *   exists in Tools.
-     */
-    private fun handleTimeInput(binder: RowBinding, rowIndex: Int, timeField: EditText, newText: String) {
-        if (newText.isBlank()) {
+    /** Ordering validated here (on blur), not on every keystroke, so partial typing
+     *  toward a larger value isn't rejected before it's finished. */
+    private fun validateTimeOnFocusLoss(binder: RowBinding, rowIndex: Int, timeField: EditText) {
+        val typed = timeField.text.toString().trim()
+        if (typed.isEmpty()) {
             binder.committedTimeValue = ""
-            binder.row = binder.row.copy(timeValue = "")
-            persistRow(binder.row)
-            recomputeAllDurations()
             return
         }
-
-        val newMinutes = parseTimeToMinutes(newText)
+        val newMinutes = parseTimeToMinutes(typed)
         if (newMinutes == null) {
-            revertTimeField(binder, timeField)
-            Toast.makeText(this, getString(R.string.recording_time_invalid_minutes, rowIndex + 1), Toast.LENGTH_SHORT).show()
+            revertTimeField(binder, timeField, rowIndex)
             return
         }
-
         if (rowIndex > 0) {
             val prevCommitted = rowBindings[rowIndex - 1].committedTimeValue
             if (prevCommitted.isNotBlank()) {
                 val prevMinutes = parseTimeToMinutes(prevCommitted)
                 if (prevMinutes != null && newMinutes <= prevMinutes) {
-                    revertTimeField(binder, timeField)
+                    revertTimeField(binder, timeField, rowIndex)
                     Toast.makeText(
                         this,
                         getString(R.string.recording_time_not_increasing, rowIndex, rowIndex + 1),
@@ -593,19 +654,18 @@ class RecordingActivity : AppCompatActivity() {
                 }
             }
         }
-
-        binder.committedTimeValue = newText
-        binder.row = binder.row.copy(timeValue = newText)
-        persistRow(binder.row)
-        recomputeAllDurations()
+        binder.committedTimeValue = typed
     }
 
-    private fun revertTimeField(binder: RowBinding, timeField: EditText) {
+    private fun revertTimeField(binder: RowBinding, timeField: EditText, rowIndex: Int) {
         binder.isRevertingTimeText = true
         val revertTo = binder.committedTimeValue
         timeField.setText(revertTo)
         timeField.setSelection(revertTo.length)
+        binder.row = binder.row.copy(timeValue = revertTo)
+        persistRow(binder.row)
         binder.isRevertingTimeText = false
+        recomputeAllDurations()
     }
 
     private fun buildFieldMatrix() {
@@ -623,14 +683,6 @@ class RecordingActivity : AppCompatActivity() {
             fieldMatrix.add(fields)
 
             for ((colIndex, field) in fields.withIndex()) {
-                if (field != binder.actionField) {
-                    field.setOnFocusChangeListener { _, hasFocus ->
-                        if (hasFocus) {
-                            currentRow = rowIndex
-                            currentCol = colIndex
-                        }
-                    }
-                }
                 field.setOnClickListener {
                     if (selectionActive) {
                         if (needsNewAnchor) {
@@ -709,23 +761,19 @@ class RecordingActivity : AppCompatActivity() {
         }
     }
 
-    private fun attemptSave() {
-        if (mode == RecordingMode.HISTORY && !isEditable) {
-            finish()
-            return
-        }
-
+    /** Shared by Recording's Save, History's Save/Close, and History's Done Editing. */
+    private fun validateRows(): Boolean {
         for ((index, binder) in rowBindings.withIndex()) {
             val rowNumber = index + 1
             if (binder.row.actionName.isBlank()) {
                 Toast.makeText(this, getString(R.string.save_missing_action, rowNumber), Toast.LENGTH_LONG).show()
                 focusCell(index, 0)
-                return
+                return false
             }
             if (timeEnabled && binder.row.timeValue.isBlank()) {
                 Toast.makeText(this, getString(R.string.save_missing_time, rowNumber), Toast.LENGTH_LONG).show()
                 focusCell(index, columnTypesForMode().indexOf(FieldType.TIME))
-                return
+                return false
             }
         }
 
@@ -739,7 +787,7 @@ class RecordingActivity : AppCompatActivity() {
                     Toast.LENGTH_LONG
                 ).show()
                 focusCell(i, 0)
-                return
+                return false
             }
         }
 
@@ -754,7 +802,7 @@ class RecordingActivity : AppCompatActivity() {
                         Toast.LENGTH_LONG
                     ).show()
                     focusCell(index, columnTypesForMode().indexOf(FieldType.TIME))
-                    return
+                    return false
                 }
                 if (durationInt < 0) {
                     Toast.makeText(
@@ -763,7 +811,7 @@ class RecordingActivity : AppCompatActivity() {
                         Toast.LENGTH_LONG
                     ).show()
                     focusCell(index, columnTypesForMode().indexOf(FieldType.TIME))
-                    return
+                    return false
                 }
                 totalMinutes += durationInt
             }
@@ -773,11 +821,21 @@ class RecordingActivity : AppCompatActivity() {
                     getString(R.string.recording_total_not_1440, totalMinutes),
                     Toast.LENGTH_LONG
                 ).show()
-                return
+                return false
             }
         }
 
-        finish()
+        return true
+    }
+
+    private fun attemptCloseOrSave() {
+        if (mode == RecordingMode.HISTORY && !isEditable) {
+            finish()
+            return
+        }
+        if (validateRows()) {
+            finish()
+        }
     }
 
     private fun confirmCancel() {
