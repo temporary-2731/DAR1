@@ -6,6 +6,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.widget.EditText
 import android.widget.PopupMenu
+import android.widget.RadioGroup
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
@@ -75,6 +76,7 @@ class MainActivity : AppCompatActivity() {
         val timeSwitch = dialogView.findViewById<Switch>(R.id.switch_time_enabled)
         val beginField = dialogView.findViewById<EditText>(R.id.edit_dsla_begin)
         val endField = dialogView.findViewById<EditText>(R.id.edit_dsla_end)
+        val modeGroup = dialogView.findViewById<RadioGroup>(R.id.radio_analysis_mode)
 
         AlertDialog.Builder(this)
             .setView(dialogView)
@@ -87,21 +89,27 @@ class MainActivity : AppCompatActivity() {
                     val endInput = endField.text.toString().trim()
                     val begin = beginInput.ifEmpty { todayString() }
                     val end = endInput.ifEmpty { null }
-                    saveDsla(name, timeSwitch.isChecked, begin, end)
+                    val mode = when (modeGroup.checkedRadioButtonId) {
+                        R.id.radio_mode2 -> "MODE2"
+                        R.id.radio_mode_manual -> "MANUAL"
+                        else -> "MODE1"
+                    }
+                    saveDsla(name, timeSwitch.isChecked, begin, end, mode)
                 }
             }
             .setNegativeButton(R.string.dsla_cancel, null)
             .show()
     }
 
-    private fun saveDsla(name: String, timeEnabled: Boolean, beginDate: String, endDate: String?) {
+    private fun saveDsla(name: String, timeEnabled: Boolean, beginDate: String, endDate: String?, analysisMode: String) {
         lifecycleScope.launch {
             db.dslaDao().insert(
                 Dsla(
                     name = name,
                     timeEnabled = timeEnabled,
                     beginDate = beginDate,
-                    endDate = endDate
+                    endDate = endDate,
+                    analysisMode = analysisMode
                 )
             )
         }
