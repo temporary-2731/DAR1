@@ -15,7 +15,7 @@ import androidx.room.RoomDatabase
         SuperActionGeneralCrossRef::class,
         RecordingRow::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
