@@ -7,6 +7,9 @@ private const val MINUTES_PER_DAY = 24 * 60
 fun RecordingActivity.recomputeAllDurations() {
     if (!timeEnabled) return
 
+    var total = 0
+    var allComplete = true
+
     for (i in rowBindings.indices) {
         val current = rowBindings[i]
         val currentMinutes = parseTimeToMinutes(current.row.timeValue)
@@ -19,7 +22,6 @@ fun RecordingActivity.recomputeAllDurations() {
                 ""
             }
         } else {
-            // Final row: duration runs until midnight (24:00 minus this row's time).
             if (currentMinutes != null) {
                 (MINUTES_PER_DAY - currentMinutes).toString()
             } else {
@@ -30,6 +32,19 @@ fun RecordingActivity.recomputeAllDurations() {
         current.row = current.row.copy(durationValue = durationText)
         current.durationView?.text = durationText.ifEmpty { getString(R.string.recording_duration_pending) }
         persistRow(current.row)
+
+        val durationInt = durationText.toIntOrNull()
+        if (durationInt != null) {
+            total += durationInt
+        } else {
+            allComplete = false
+        }
+    }
+
+    binding.totalDurationText.text = if (allComplete) {
+        getString(R.string.recording_total_duration_format, total)
+    } else {
+        getString(R.string.recording_total_duration_format, total) + " (incomplete)"
     }
 }
 
