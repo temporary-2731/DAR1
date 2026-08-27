@@ -123,4 +123,10 @@
     <string name="save_missing_action">Row %1$d is missing an Action</string>
     <string name="save_missing_time">Row %1$d is missing a Time value</string>
     <string name="recording_consecutive_action_error">Row %1$d and Row %2$d can\'t have the same Action consecutively</string>
+    <string name="history_edit">Edit</string>
+    <string name="history_done_editing">Done Editing</string>
+    <string name="history_highlight_mode">Highlight</string>
+    <string name="history_close">Close</string>
+    <string name="highlight_mode_title">Highlight Mode</string>
+    <string name="highlight_no_actions">No actions recorded</string>
 </resources>
