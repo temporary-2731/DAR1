@@ -1,6 +1,7 @@
 package com.dar.app.data
 
 import androidx.room.*
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface RecordingDao {
@@ -22,4 +23,7 @@ interface RecordingDao {
 
     @Query("SELECT COUNT(*) FROM recording_row WHERE dslaId = :dslaId AND date = :date")
     suspend fun countForDate(dslaId: Long, date: String): Int
+
+    @Query("SELECT DISTINCT date FROM recording_row WHERE dslaId = :dslaId")
+    fun getDistinctDates(dslaId: Long): Flow<List<String>>
 }
