@@ -7,6 +7,10 @@
     <string name="dsla_name_label">Name</string>
     <string name="dsla_name_hint">e.g. Fitness, Study, Work</string>
     <string name="dsla_time_toggle_label">Time based</string>
+    <string name="dsla_begin_label">Beginning Date (optional)</string>
+    <string name="dsla_begin_hint">DD/MM/YYYY — blank = today</string>
+    <string name="dsla_end_label">End Date (optional)</string>
+    <string name="dsla_end_hint">DD/MM/YYYY — blank = ongoing</string>
     <string name="dsla_save">Save</string>
     <string name="dsla_cancel">Cancel</string>
     <string name="dsla_name_required">Name cannot be empty</string>
@@ -129,4 +133,5 @@
     <string name="history_close">Close</string>
     <string name="highlight_mode_title">Highlight Mode</string>
     <string name="highlight_no_actions">No actions recorded</string>
+    <string name="recording_dsla_ended_message">This DSLA ended on %1$s. Use History to view or edit its records.</string>
 </resources>
