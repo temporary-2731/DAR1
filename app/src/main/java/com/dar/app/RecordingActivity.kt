@@ -161,8 +161,6 @@ class RecordingActivity : AppCompatActivity() {
         }
     }
 
-    /** Toggling Edit on for a day with zero rows auto-creates a first blank row,
-     *  the same way Recording always guarantees at least one row to type into. */
     private fun toggleEdit() {
         isEditable = !isEditable
         if (isEditable && rowBindings.isEmpty()) {
@@ -288,9 +286,6 @@ class RecordingActivity : AppCompatActivity() {
         }
     }
 
-    /** Fetches rows for the current date. Auto-creates a first blank row when
-     *  in Recording mode, or in History mode while Edit is active — matching
-     *  Recording's guarantee that there's always at least one row to type into. */
     private fun loadRowsForCurrentDate() {
         lifecycleScope.launch {
             var rows = db.recordingDao().getRowsForDate(dslaId, todayDate)
@@ -392,7 +387,8 @@ class RecordingActivity : AppCompatActivity() {
             durationView = durationView,
             quanFields = quanFields,
             commentField = commentField,
-            committedActionName = row.actionName
+            committedActionName = row.actionName,
+            committedTimeValue = row.timeValue
         )
         rowBindings.add(binder)
         val thisRowIndex = rowBindings.size - 1
@@ -479,10 +475,15 @@ class RecordingActivity : AppCompatActivity() {
         })
 
         if (timeEnabled) {
-            timeField?.addTextChangedListener(snapshotWatcher(binder) { text ->
-                binder.row = binder.row.copy(timeValue = text)
-                persistRow(binder.row)
-                recomputeAllDurations()
+            timeField?.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
+                    if (!suppressSnapshotCapture) captureUndoSnapshot()
+                }
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                override fun afterTextChanged(s: Editable?) {
+                    if (binder.isRevertingTimeText) return
+                    handleTimeInput(binder, thisRowIndex, timeField, s?.toString() ?: "")
+                }
             })
             quanFields.getOrNull(0)?.addTextChangedListener(snapshotWatcher(binder) { text ->
                 binder.row = binder.row.copy(quan1 = text)
@@ -551,6 +552,60 @@ class RecordingActivity : AppCompatActivity() {
         }
 
         binding.rowContainer.addView(rowView)
+    }
+
+    /**
+     * Validates a Time cell in real time, mirroring the Action field's strict-block pattern:
+     * - Blank is always allowed (clears the cell).
+     * - A value whose minute component is outside [00,59) is rejected immediately.
+     * - (24-hour mode) A value not strictly later than the previous row's committed time
+     *   is rejected immediately. 12-hour wraparound is deferred until the format toggle
+     *   exists in Tools.
+     */
+    private fun handleTimeInput(binder: RowBinding, rowIndex: Int, timeField: EditText, newText: String) {
+        if (newText.isBlank()) {
+            binder.committedTimeValue = ""
+            binder.row = binder.row.copy(timeValue = "")
+            persistRow(binder.row)
+            recomputeAllDurations()
+            return
+        }
+
+        val newMinutes = parseTimeToMinutes(newText)
+        if (newMinutes == null) {
+            revertTimeField(binder, timeField)
+            Toast.makeText(this, getString(R.string.recording_time_invalid_minutes, rowIndex + 1), Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (rowIndex > 0) {
+            val prevCommitted = rowBindings[rowIndex - 1].committedTimeValue
+            if (prevCommitted.isNotBlank()) {
+                val prevMinutes = parseTimeToMinutes(prevCommitted)
+                if (prevMinutes != null && newMinutes <= prevMinutes) {
+                    revertTimeField(binder, timeField)
+                    Toast.makeText(
+                        this,
+                        getString(R.string.recording_time_not_increasing, rowIndex, rowIndex + 1),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return
+                }
+            }
+        }
+
+        binder.committedTimeValue = newText
+        binder.row = binder.row.copy(timeValue = newText)
+        persistRow(binder.row)
+        recomputeAllDurations()
+    }
+
+    private fun revertTimeField(binder: RowBinding, timeField: EditText) {
+        binder.isRevertingTimeText = true
+        val revertTo = binder.committedTimeValue
+        timeField.setText(revertTo)
+        timeField.setSelection(revertTo.length)
+        binder.isRevertingTimeText = false
     }
 
     private fun buildFieldMatrix() {
@@ -684,6 +739,40 @@ class RecordingActivity : AppCompatActivity() {
                     Toast.LENGTH_LONG
                 ).show()
                 focusCell(i, 0)
+                return
+            }
+        }
+
+        if (timeEnabled) {
+            var totalMinutes = 0
+            for ((index, binder) in rowBindings.withIndex()) {
+                val durationInt = binder.row.durationValue.toIntOrNull()
+                if (durationInt == null) {
+                    Toast.makeText(
+                        this,
+                        getString(R.string.recording_duration_incomplete, index + 1),
+                        Toast.LENGTH_LONG
+                    ).show()
+                    focusCell(index, columnTypesForMode().indexOf(FieldType.TIME))
+                    return
+                }
+                if (durationInt < 0) {
+                    Toast.makeText(
+                        this,
+                        getString(R.string.recording_duration_negative, index + 1),
+                        Toast.LENGTH_LONG
+                    ).show()
+                    focusCell(index, columnTypesForMode().indexOf(FieldType.TIME))
+                    return
+                }
+                totalMinutes += durationInt
+            }
+            if (totalMinutes != 1440) {
+                Toast.makeText(
+                    this,
+                    getString(R.string.recording_total_not_1440, totalMinutes),
+                    Toast.LENGTH_LONG
+                ).show()
                 return
             }
         }
