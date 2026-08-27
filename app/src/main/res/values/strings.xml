@@ -11,6 +11,10 @@
     <string name="dsla_begin_hint">DD/MM/YYYY — blank = today</string>
     <string name="dsla_end_label">End Date (optional)</string>
     <string name="dsla_end_hint">DD/MM/YYYY — blank = ongoing</string>
+    <string name="dsla_analysis_mode_label">Analysis Mode</string>
+    <string name="dsla_analysis_mode1">Mode 1</string>
+    <string name="dsla_analysis_mode2">Mode 2</string>
+    <string name="dsla_analysis_mode_manual">Manual</string>
     <string name="dsla_save">Save</string>
     <string name="dsla_cancel">Cancel</string>
     <string name="dsla_name_required">Name cannot be empty</string>
@@ -83,6 +87,7 @@
     <string name="recording_quan3_hint">Quan3</string>
     <string name="recording_comment_hint">Comment</string>
     <string name="recording_duration_pending">—</string>
+    <string name="recording_total_duration_format">Total: %1$d min</string>
     <string name="recording_cancel_confirm">Cancel will erase everything entered today. Continue?</string>
     <string name="recording_cancel_yes">Yes, erase</string>
     <string name="recording_cancel_no">No, keep editing</string>
@@ -138,5 +143,13 @@
     <string name="recording_time_not_increasing">Row %2$d\'s time must be later than Row %1$d\'s time</string>
     <string name="recording_duration_incomplete">Row %1$d has an incomplete or invalid duration</string>
     <string name="recording_duration_negative">Row %1$d has a negative duration — check the time values</string>
-    <string name="recording_total_not_1440">Total recorded time is %1$d minutes; it must add up to exactly 1440 (a full day, starting at 00.00) before saving</string>
+    <string name="recording_total_not_1440">Total recorded time is %1$d minutes; it must add up to exactly 1440 (a full day, starting at 00.00)</string>
+    <string name="analysis_change_mode">Change Mode</string>
+    <string name="analysis_save_mode">Save</string>
+    <string name="analysis_mode1_title">Mode 1</string>
+    <string name="analysis_mode2_title">Mode 2</string>
+    <string name="analysis_mode_manual_title">Manual</string>
+    <string name="analysis_coming_soon">Coming in the next build</string>
+    <string name="analysis_mode1_list_title">General &amp; Super Actions</string>
+    <string name="analysis_mode1_no_items">No General or Super Actions yet — create some in the Library section first</string>
 </resources>
