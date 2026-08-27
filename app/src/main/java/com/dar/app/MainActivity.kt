@@ -16,6 +16,9 @@ import com.dar.app.data.AppDatabase
 import com.dar.app.data.Dsla
 import com.dar.app.databinding.ActivityMainBinding
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
@@ -33,6 +36,10 @@ class MainActivity : AppCompatActivity() {
         binding.btnAddDsla.setOnClickListener { showCreateDslaDialog() }
 
         observeDslaList()
+    }
+
+    private fun todayString(): String {
+        return SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
     }
 
     private fun observeDslaList() {
@@ -66,6 +73,8 @@ class MainActivity : AppCompatActivity() {
             .inflate(R.layout.dialog_create_dsla, null)
         val nameField = dialogView.findViewById<EditText>(R.id.edit_dsla_name)
         val timeSwitch = dialogView.findViewById<Switch>(R.id.switch_time_enabled)
+        val beginField = dialogView.findViewById<EditText>(R.id.edit_dsla_begin)
+        val endField = dialogView.findViewById<EditText>(R.id.edit_dsla_end)
 
         AlertDialog.Builder(this)
             .setView(dialogView)
@@ -74,16 +83,27 @@ class MainActivity : AppCompatActivity() {
                 if (name.isEmpty()) {
                     Toast.makeText(this, R.string.dsla_name_required, Toast.LENGTH_SHORT).show()
                 } else {
-                    saveDsla(name, timeSwitch.isChecked)
+                    val beginInput = beginField.text.toString().trim()
+                    val endInput = endField.text.toString().trim()
+                    val begin = beginInput.ifEmpty { todayString() }
+                    val end = endInput.ifEmpty { null }
+                    saveDsla(name, timeSwitch.isChecked, begin, end)
                 }
             }
             .setNegativeButton(R.string.dsla_cancel, null)
             .show()
     }
 
-    private fun saveDsla(name: String, timeEnabled: Boolean) {
+    private fun saveDsla(name: String, timeEnabled: Boolean, beginDate: String, endDate: String?) {
         lifecycleScope.launch {
-            db.dslaDao().insert(Dsla(name = name, timeEnabled = timeEnabled))
+            db.dslaDao().insert(
+                Dsla(
+                    name = name,
+                    timeEnabled = timeEnabled,
+                    beginDate = beginDate,
+                    endDate = endDate
+                )
+            )
         }
     }
 
