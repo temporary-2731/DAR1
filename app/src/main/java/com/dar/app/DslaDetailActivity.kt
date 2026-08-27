@@ -38,7 +38,7 @@ class DslaDetailActivity : AppCompatActivity() {
 
         binding.btnRecording.setOnClickListener { checkAndOpenRecording() }
         binding.btnLibrary.setOnClickListener { openLibrary() }
-        binding.btnAnalysis.setOnClickListener { sectionComingSoon("Analysis") }
+        binding.btnAnalysis.setOnClickListener { openAnalysis() }
         binding.btnReport.setOnClickListener { sectionComingSoon("Report") }
         binding.btnHistory.setOnClickListener { openHistory() }
         binding.btnTools.setOnClickListener { sectionComingSoon("Tools") }
@@ -85,6 +85,13 @@ class DslaDetailActivity : AppCompatActivity() {
     private fun openLibrary() {
         val intent = Intent(this, LibraryActivity::class.java).apply {
             putExtra(LibraryActivity.EXTRA_DSLA_ID, dslaId)
+        }
+        startActivity(intent)
+    }
+
+    private fun openAnalysis() {
+        val intent = Intent(this, AnalysisActivity::class.java).apply {
+            putExtra(AnalysisActivity.EXTRA_DSLA_ID, dslaId)
         }
         startActivity(intent)
     }
