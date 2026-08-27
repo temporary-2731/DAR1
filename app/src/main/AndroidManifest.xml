@@ -33,6 +33,14 @@
             android:name=".HighlightModeActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".AnalysisActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".AnalysisMode1Activity"
+            android:exported="false" />
+
     </application>
 
 </manifest>
