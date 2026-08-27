@@ -134,4 +134,9 @@
     <string name="highlight_mode_title">Highlight Mode</string>
     <string name="highlight_no_actions">No actions recorded</string>
     <string name="recording_dsla_ended_message">This DSLA ended on %1$s. Use History to view or edit its records.</string>
+    <string name="recording_time_invalid_minutes">Row %1$d: minutes must be between 00 and 59</string>
+    <string name="recording_time_not_increasing">Row %2$d\'s time must be later than Row %1$d\'s time</string>
+    <string name="recording_duration_incomplete">Row %1$d has an incomplete or invalid duration</string>
+    <string name="recording_duration_negative">Row %1$d has a negative duration — check the time values</string>
+    <string name="recording_total_not_1440">Total recorded time is %1$d minutes; it must add up to exactly 1440 (a full day, starting at 00.00) before saving</string>
 </resources>
