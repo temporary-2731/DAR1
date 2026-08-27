@@ -1,10 +1,12 @@
 package com.dar.app
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.LayoutInflater
+import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
@@ -21,6 +23,7 @@ import com.dar.app.databinding.ActivityRecordingBinding
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -31,6 +34,9 @@ class RecordingActivity : AppCompatActivity() {
     var dslaId: Long = -1L
     lateinit var todayDate: String
     var timeEnabled: Boolean = true
+
+    var mode: RecordingMode = RecordingMode.RECORDING
+    var isEditable: Boolean = true
 
     var libraryActions: List<ActionEntity> = emptyList()
     lateinit var actionNameAdapter: ArrayAdapter<String>
@@ -59,6 +65,8 @@ class RecordingActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_DSLA_ID = "extra_dsla_id"
+        const val EXTRA_MODE = "extra_mode"
+        const val EXTRA_TARGET_DATE = "extra_target_date"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -69,10 +77,23 @@ class RecordingActivity : AppCompatActivity() {
         dslaId = intent.getLongExtra(EXTRA_DSLA_ID, -1L)
         db = AppDatabase.getInstance(applicationContext)
 
+        mode = if (intent.getStringExtra(EXTRA_MODE) == "HISTORY") {
+            RecordingMode.HISTORY
+        } else {
+            RecordingMode.RECORDING
+        }
+
         val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-        todayDate = sdf.format(Date())
-        val dayName = SimpleDateFormat("EEEE", Locale.getDefault()).format(Date())
-        binding.dateHeader.text = "$todayDate  $dayName"
+        val passedDate = intent.getStringExtra(EXTRA_TARGET_DATE)
+        todayDate = if (mode == RecordingMode.HISTORY) {
+            passedDate ?: sdf.format(Date())
+        } else {
+            sdf.format(Date())
+        }
+
+        isEditable = (mode == RecordingMode.RECORDING)
+
+        updateDateHeaderText()
 
         binding.btnAddRow.setOnClickListener {
             captureUndoSnapshot()
@@ -101,12 +122,105 @@ class RecordingActivity : AppCompatActivity() {
         binding.btnUndo.setOnClickListener { performUndo() }
         binding.btnRedo.setOnClickListener { performRedo() }
 
+        binding.btnEditToggle.setOnClickListener { toggleEdit() }
+        binding.btnHighlightMode.setOnClickListener { openHighlightMode() }
+        binding.btnDatePrev.setOnClickListener { navigateDate(-1) }
+        binding.btnDateNext.setOnClickListener { navigateDate(1) }
+
         actionNameAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, mutableListOf())
 
-        loadAndRenderRows()
+        applyModeUi()
+        loadInitialConfig()
     }
 
-    private fun loadAndRenderRows() {
+    private fun applyModeUi() {
+        if (mode == RecordingMode.HISTORY) {
+            binding.historyTopBar.visibility = View.VISIBLE
+            binding.btnDatePrev.visibility = View.VISIBLE
+            binding.btnDateNext.visibility = View.VISIBLE
+            binding.btnCancel.visibility = View.GONE
+            binding.btnSave.text = getString(R.string.history_close)
+            updateDateNavButtons()
+        } else {
+            binding.historyTopBar.visibility = View.GONE
+            binding.btnDatePrev.visibility = View.GONE
+            binding.btnDateNext.visibility = View.GONE
+            binding.btnCancel.visibility = View.VISIBLE
+            binding.btnSave.text = getString(R.string.recording_save)
+        }
+    }
+
+    private fun updateEditToggleButtonText() {
+        binding.btnEditToggle.text = if (isEditable) {
+            getString(R.string.history_done_editing)
+        } else {
+            getString(R.string.history_edit)
+        }
+    }
+
+    private fun toggleEdit() {
+        isEditable = !isEditable
+        applyEditableStateToFields()
+    }
+
+    private fun applyEditableStateToFields() {
+        for (binder in rowBindings) {
+            binder.rowLabel.isEnabled = isEditable
+            binder.actionField.isEnabled = isEditable
+            binder.timeField?.isEnabled = isEditable
+            for (q in binder.quanFields) q.isEnabled = isEditable
+            binder.commentField.isEnabled = isEditable
+        }
+        if (mode == RecordingMode.HISTORY) {
+            val toolbarVisibility = if (isEditable) View.VISIBLE else View.GONE
+            binding.arrowBar.visibility = toolbarVisibility
+            binding.undoRedoBar.visibility = toolbarVisibility
+            binding.btnAddRow.visibility = toolbarVisibility
+        }
+        updateEditToggleButtonText()
+    }
+
+    private fun updateDateHeaderText() {
+        val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+        val parsed = sdf.parse(todayDate) ?: Date()
+        val dayName = SimpleDateFormat("EEEE", Locale.getDefault()).format(parsed)
+        binding.dateHeader.text = "$todayDate  $dayName"
+    }
+
+    private fun updateDateNavButtons() {
+        val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+        val current = sdf.parse(todayDate)
+        val today = sdf.parse(sdf.format(Date()))
+        val atToday = current != null && today != null && !current.before(today)
+        binding.btnDateNext.isEnabled = !atToday
+        binding.btnDateNext.alpha = if (atToday) 0.4f else 1f
+    }
+
+    private fun navigateDate(deltaDays: Int) {
+        val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+        val cal = Calendar.getInstance()
+        cal.time = sdf.parse(todayDate) ?: Date()
+        cal.add(Calendar.DAY_OF_MONTH, deltaDays)
+        val newDate = cal.time
+        val today = sdf.parse(sdf.format(Date())) ?: Date()
+        if (newDate.after(today)) return
+
+        todayDate = sdf.format(newDate)
+        undoStack.clear()
+        redoStack.clear()
+        updateDateHeaderText()
+        updateDateNavButtons()
+        loadRowsForCurrentDate()
+    }
+
+    private fun openHighlightMode() {
+        val intent = Intent(this, HighlightModeActivity::class.java).apply {
+            putExtra(HighlightModeActivity.EXTRA_DSLA_ID, dslaId)
+        }
+        startActivity(intent)
+    }
+
+    private fun loadInitialConfig() {
         lifecycleScope.launch {
             val dsla = db.dslaDao().getById(dslaId)
             timeEnabled = dsla?.timeEnabled ?: true
@@ -116,14 +230,19 @@ class RecordingActivity : AppCompatActivity() {
             actionNameAdapter.addAll(libraryActions.map { it.name })
             actionNameAdapter.notifyDataSetChanged()
 
+            loadRowsForCurrentDate()
+        }
+    }
+
+    private fun loadRowsForCurrentDate() {
+        lifecycleScope.launch {
             var rows = db.recordingDao().getRowsForDate(dslaId, todayDate)
-            if (rows.isEmpty()) {
+            if (rows.isEmpty() && mode == RecordingMode.RECORDING) {
                 db.recordingDao().insert(
                     RecordingRow(dslaId = dslaId, date = todayDate, rowNumber = 1)
                 )
                 rows = db.recordingDao().getRowsForDate(dslaId, todayDate)
             }
-
             renderRows(rows)
         }
     }
@@ -148,6 +267,7 @@ class RecordingActivity : AppCompatActivity() {
         recomputeAllDurations()
         buildFieldMatrix()
         updateUndoRedoButtons()
+        applyEditableStateToFields()
     }
 
     private fun addHeaderView() {
@@ -475,6 +595,11 @@ class RecordingActivity : AppCompatActivity() {
     }
 
     private fun attemptSave() {
+        if (mode == RecordingMode.HISTORY && !isEditable) {
+            finish()
+            return
+        }
+
         for ((index, binder) in rowBindings.withIndex()) {
             val rowNumber = index + 1
             if (binder.row.actionName.isBlank()) {
