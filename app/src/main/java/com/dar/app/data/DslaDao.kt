@@ -20,4 +20,7 @@ interface DslaDao {
 
     @Query("SELECT * FROM dsla WHERE id = :id")
     suspend fun getById(id: Long): Dsla?
+
+    @Query("UPDATE dsla SET analysisMode = :mode WHERE id = :dslaId")
+    suspend fun updateAnalysisMode(dslaId: Long, mode: String)
 }
