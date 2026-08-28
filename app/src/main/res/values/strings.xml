@@ -175,4 +175,5 @@
     <string name="form_delete_confirm">Delete this form permanently? Its parameters will be lost.</string>
     <string name="form_delete_yes">Delete</string>
     <string name="form_delete_no">Cancel</string>
+    <string name="form_outside_dsla_range">Form dates must fall within the DSLA\'s own beginning and end dates</string>
 </resources>
