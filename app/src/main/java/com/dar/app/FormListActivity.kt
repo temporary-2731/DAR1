@@ -50,9 +50,16 @@ class FormListActivity : AppCompatActivity() {
     private fun observeForms() {
         lifecycleScope.launch {
             db.analysisFormDao().getFormsFor(generalActionId, periodType).collect { forms ->
-                renderForms(forms)
+                renderForms(sortFormsChronologically(forms))
             }
         }
+    }
+
+    /** Sorts by actual parsed date, since the stored beginDate is plain DD/MM/YYYY text
+     *  and would otherwise sort alphabetically (e.g. "25/01" before "03/02"). */
+    private fun sortFormsChronologically(forms: List<AnalysisForm>): List<AnalysisForm> {
+        val sdf = SimpleDateFormat(DATE_FORMAT, Locale.getDefault())
+        return forms.sortedBy { sdf.parse(it.beginDate)?.time ?: 0L }
     }
 
     private fun renderForms(forms: List<AnalysisForm>) {
@@ -81,7 +88,6 @@ class FormListActivity : AppCompatActivity() {
             }
 
             itemView.setOnClickListener {
-                // Next phase: opens the actual parameter-entry grid for this form.
                 Toast.makeText(this, R.string.analysis_coming_soon, Toast.LENGTH_SHORT).show()
             }
 
@@ -123,6 +129,16 @@ class FormListActivity : AppCompatActivity() {
                 }
 
                 lifecycleScope.launch {
+                    val dsla = db.dslaDao().getById(dslaId)
+                    if (dsla == null) {
+                        return@launch
+                    }
+
+                    if (!isWithinDslaRange(begin, end, dsla.beginDate, dsla.endDate)) {
+                        Toast.makeText(this@FormListActivity, R.string.form_outside_dsla_range, Toast.LENGTH_LONG).show()
+                        return@launch
+                    }
+
                     val existing = db.analysisFormDao().getFormsForOnce(generalActionId, periodType)
                     if (rangesOverlapAny(begin, end, existing)) {
                         Toast.makeText(this@FormListActivity, R.string.form_overlap_error, Toast.LENGTH_LONG).show()
@@ -143,8 +159,28 @@ class FormListActivity : AppCompatActivity() {
             .show()
     }
 
-    /** Checks the new [begin, end] range against every existing form's range for overlap.
-     *  A null end (ongoing) is treated as extending indefinitely into the future. */
+    /** Both the form's begin and end (if set) must fall within [dslaBegin, dslaEnd or unbounded]. */
+    private fun isWithinDslaRange(formBegin: String, formEnd: String?, dslaBegin: String, dslaEnd: String?): Boolean {
+        val sdf = SimpleDateFormat(DATE_FORMAT, Locale.getDefault())
+        val dslaBeginParsed = sdf.parse(dslaBegin) ?: return false
+        val dslaEndParsed = dslaEnd?.let { sdf.parse(it) }
+        val formBeginParsed = sdf.parse(formBegin) ?: return false
+        val formEndParsed = formEnd?.let { sdf.parse(it) }
+
+        if (formBeginParsed.before(dslaBeginParsed)) return false
+        if (dslaEndParsed != null && formBeginParsed.after(dslaEndParsed)) return false
+
+        if (formEndParsed != null) {
+            if (formEndParsed.before(dslaBeginParsed)) return false
+            if (dslaEndParsed != null && formEndParsed.after(dslaEndParsed)) return false
+        } else {
+            // An ongoing form is only valid if the DSLA itself is ongoing.
+            if (dslaEndParsed != null) return false
+        }
+
+        return true
+    }
+
     private fun rangesOverlapAny(begin: String, end: String?, existing: List<AnalysisForm>): Boolean {
         val sdf = SimpleDateFormat(DATE_FORMAT, Locale.getDefault())
         val newBegin = sdf.parse(begin) ?: return true
