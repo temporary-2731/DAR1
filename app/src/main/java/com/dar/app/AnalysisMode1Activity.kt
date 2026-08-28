@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.dar.app.data.AppDatabase
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class AnalysisMode1Activity : AppCompatActivity() {
@@ -33,8 +34,8 @@ class AnalysisMode1Activity : AppCompatActivity() {
 
     private fun loadItems() {
         lifecycleScope.launch {
-            val generals = db.generalActionDao().getActiveForDsla(dslaId).first0()
-            val supers = db.superActionDao().getActiveForDsla(dslaId).first0()
+            val generals = db.generalActionDao().getActiveForDsla(dslaId).first()
+            val supers = db.superActionDao().getActiveForDsla(dslaId).first()
 
             if (generals.isEmpty() && supers.isEmpty()) {
                 val empty = TextView(this@AnalysisMode1Activity)
@@ -61,10 +62,5 @@ class AnalysisMode1Activity : AppCompatActivity() {
             Toast.makeText(this, R.string.analysis_coming_soon, Toast.LENGTH_SHORT).show()
         }
         container.addView(itemView)
-    }
-
-    // Small local helper since these DAOs return Flow — take the first emission only.
-    private suspend fun <T> kotlinx.coroutines.flow.Flow<T>.first0(): T {
-        return kotlinx.coroutines.flow.first(this)
     }
 }
