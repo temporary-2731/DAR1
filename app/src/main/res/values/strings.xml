@@ -152,4 +152,27 @@
     <string name="analysis_coming_soon">Coming in the next build</string>
     <string name="analysis_mode1_list_title">General &amp; Super Actions</string>
     <string name="analysis_mode1_no_items">No General or Super Actions yet — create some in the Library section first</string>
+    <string name="period_daily">Daily</string>
+    <string name="period_weekly">Weekly</string>
+    <string name="period_monthly">Monthly</string>
+    <string name="period_yearly">Yearly</string>
+    <string name="period_alltime">All Time</string>
+    <string name="form_create_new">+ Create New Form</string>
+    <string name="form_no_forms">No forms yet — create the first one</string>
+    <string name="form_delete">Delete</string>
+    <string name="form_edit">Edit</string>
+    <string name="form_number_format">Form %1$d</string>
+    <string name="form_range_format">%1$s — %2$s</string>
+    <string name="form_range_ongoing">%1$s — ongoing</string>
+    <string name="form_begin_label">Beginning Date</string>
+    <string name="form_begin_hint">DD/MM/YYYY</string>
+    <string name="form_end_label">End Date (optional)</string>
+    <string name="form_end_hint">DD/MM/YYYY — blank = ongoing</string>
+    <string name="form_begin_required">Beginning date is required</string>
+    <string name="form_overlap_error">These dates overlap an existing form — choose different dates</string>
+    <string name="form_save">Save</string>
+    <string name="form_cancel">Cancel</string>
+    <string name="form_delete_confirm">Delete this form permanently? Its parameters will be lost.</string>
+    <string name="form_delete_yes">Delete</string>
+    <string name="form_delete_no">Cancel</string>
 </resources>
