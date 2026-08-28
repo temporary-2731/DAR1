@@ -16,30 +16,17 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".DslaDetailActivity"
-            android:exported="false" />
-
-        <activity
-            android:name=".LibraryActivity"
-            android:exported="false" />
-
+        <activity android:name=".DslaDetailActivity" android:exported="false" />
+        <activity android:name=".LibraryActivity" android:exported="false" />
         <activity
             android:name=".RecordingActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
-
-        <activity
-            android:name=".HighlightModeActivity"
-            android:exported="false" />
-
-        <activity
-            android:name=".AnalysisActivity"
-            android:exported="false" />
-
-        <activity
-            android:name=".AnalysisMode1Activity"
-            android:exported="false" />
+        <activity android:name=".HighlightModeActivity" android:exported="false" />
+        <activity android:name=".AnalysisActivity" android:exported="false" />
+        <activity android:name=".AnalysisMode1Activity" android:exported="false" />
+        <activity android:name=".PeriodTypeSelectActivity" android:exported="false" />
+        <activity android:name=".FormListActivity" android:exported="false" />
 
     </application>
 
