@@ -1,5 +1,6 @@
 package com.dar.app
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.widget.LinearLayout
@@ -46,15 +47,29 @@ class AnalysisMode1Activity : AppCompatActivity() {
             }
 
             for (g in generals) {
-                addItem(g.name)
+                addGeneralActionItem(g.id, g.name)
             }
             for (s in supers) {
-                addItem(s.name)
+                addSuperActionItem(s.name)
             }
         }
     }
 
-    private fun addItem(label: String) {
+    private fun addGeneralActionItem(generalActionId: Long, label: String) {
+        val itemView = LayoutInflater.from(this)
+            .inflate(R.layout.item_action, container, false) as TextView
+        itemView.text = label
+        itemView.setOnClickListener {
+            val intent = Intent(this, PeriodTypeSelectActivity::class.java).apply {
+                putExtra(PeriodTypeSelectActivity.EXTRA_GENERAL_ACTION_ID, generalActionId)
+                putExtra(PeriodTypeSelectActivity.EXTRA_DSLA_ID, dslaId)
+            }
+            startActivity(intent)
+        }
+        container.addView(itemView)
+    }
+
+    private fun addSuperActionItem(label: String) {
         val itemView = LayoutInflater.from(this)
             .inflate(R.layout.item_action, container, false) as TextView
         itemView.text = label
