@@ -27,6 +27,8 @@
         <activity android:name=".AnalysisMode1Activity" android:exported="false" />
         <activity android:name=".PeriodTypeSelectActivity" android:exported="false" />
         <activity android:name=".FormListActivity" android:exported="false" />
+        <activity android:name=".FormDetailActivity" android:exported="false" />
+        <activity android:name=".EngineCheckActivity" android:exported="false" />
 
     </application>
 
