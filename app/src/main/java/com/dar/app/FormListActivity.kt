@@ -1,5 +1,6 @@
 package com.dar.app
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.widget.Button
@@ -43,8 +44,17 @@ class FormListActivity : AppCompatActivity() {
 
         container = findViewById(R.id.form_list_container)
         findViewById<Button>(R.id.btn_create_form).setOnClickListener { showCreateFormDialog() }
+        findViewById<Button>(R.id.btn_check_engine).setOnClickListener { openEngineCheck() }
 
         observeForms()
+    }
+
+    private fun openEngineCheck() {
+        val intent = Intent(this, EngineCheckActivity::class.java).apply {
+            putExtra(EngineCheckActivity.EXTRA_DSLA_ID, dslaId)
+            putExtra(EngineCheckActivity.EXTRA_GENERAL_ACTION_ID, generalActionId)
+        }
+        startActivity(intent)
     }
 
     private fun observeForms() {
@@ -55,8 +65,6 @@ class FormListActivity : AppCompatActivity() {
         }
     }
 
-    /** Sorts by actual parsed date, since the stored beginDate is plain DD/MM/YYYY text
-     *  and would otherwise sort alphabetically (e.g. "25/01" before "03/02"). */
     private fun sortFormsChronologically(forms: List<AnalysisForm>): List<AnalysisForm> {
         val sdf = SimpleDateFormat(DATE_FORMAT, Locale.getDefault())
         return forms.sortedBy { sdf.parse(it.beginDate)?.time ?: 0L }
@@ -88,7 +96,11 @@ class FormListActivity : AppCompatActivity() {
             }
 
             itemView.setOnClickListener {
-                Toast.makeText(this, R.string.analysis_coming_soon, Toast.LENGTH_SHORT).show()
+                val intent = Intent(this, FormDetailActivity::class.java).apply {
+                    putExtra(FormDetailActivity.EXTRA_FORM_ID, form.id)
+                    putExtra(FormDetailActivity.EXTRA_GENERAL_ACTION_ID, generalActionId)
+                }
+                startActivity(intent)
             }
 
             btnDelete.setOnClickListener {
@@ -129,10 +141,7 @@ class FormListActivity : AppCompatActivity() {
                 }
 
                 lifecycleScope.launch {
-                    val dsla = db.dslaDao().getById(dslaId)
-                    if (dsla == null) {
-                        return@launch
-                    }
+                    val dsla = db.dslaDao().getById(dslaId) ?: return@launch
 
                     if (!isWithinDslaRange(begin, end, dsla.beginDate, dsla.endDate)) {
                         Toast.makeText(this@FormListActivity, R.string.form_outside_dsla_range, Toast.LENGTH_LONG).show()
@@ -159,7 +168,6 @@ class FormListActivity : AppCompatActivity() {
             .show()
     }
 
-    /** Both the form's begin and end (if set) must fall within [dslaBegin, dslaEnd or unbounded]. */
     private fun isWithinDslaRange(formBegin: String, formEnd: String?, dslaBegin: String, dslaEnd: String?): Boolean {
         val sdf = SimpleDateFormat(DATE_FORMAT, Locale.getDefault())
         val dslaBeginParsed = sdf.parse(dslaBegin) ?: return false
@@ -174,10 +182,8 @@ class FormListActivity : AppCompatActivity() {
             if (formEndParsed.before(dslaBeginParsed)) return false
             if (dslaEndParsed != null && formEndParsed.after(dslaEndParsed)) return false
         } else {
-            // An ongoing form is only valid if the DSLA itself is ongoing.
             if (dslaEndParsed != null) return false
         }
-
         return true
     }
 
