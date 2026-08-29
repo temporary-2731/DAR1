@@ -5,6 +5,14 @@
     android:orientation="vertical"
     android:background="@color/dar_light">
 
+    <Button
+        android:id="@+id/btn_check_engine"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="8dp"
+        android:textSize="11sp"
+        android:text="@string/check_engine_button" />
+
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
