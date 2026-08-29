@@ -170,10 +170,27 @@
     <string name="form_end_hint">DD/MM/YYYY — blank = ongoing</string>
     <string name="form_begin_required">Beginning date is required</string>
     <string name="form_overlap_error">These dates overlap an existing form — choose different dates</string>
+    <string name="form_outside_dsla_range">Form dates must fall within the DSLA\'s own beginning and end dates</string>
     <string name="form_save">Save</string>
     <string name="form_cancel">Cancel</string>
     <string name="form_delete_confirm">Delete this form permanently? Its parameters will be lost.</string>
     <string name="form_delete_yes">Delete</string>
     <string name="form_delete_no">Cancel</string>
-    <string name="form_outside_dsla_range">Form dates must fall within the DSLA\'s own beginning and end dates</string>
+    <string name="param_dimension_label">Dimension (1–10)</string>
+    <string name="param_time_label">Time vector (H.MM, comma-separated)</string>
+    <string name="param_duration_label">Duration vector (minutes, comma-separated)</string>
+    <string name="param_quan1_label">Quan1 vector (comma-separated)</string>
+    <string name="param_general_row_label">General Action (derived — read only)</string>
+    <string name="param_save">Save</string>
+    <string name="param_edit">Edit</string>
+    <string name="param_done_editing">Done Editing</string>
+    <string name="param_dimension_invalid">Row %1$d: dimension must be between 1 and 10</string>
+    <string name="param_vector_length_mismatch">Row %1$d, %2$s: expected %3$d values, got %4$d</string>
+    <string name="param_vector_negative">Row %1$d, %2$s: negative values are not allowed</string>
+    <string name="param_vector_invalid_number">Row %1$d, %2$s: contains a value that isn\'t a number</string>
+    <string name="param_time_duplicate">Row %1$d: Time vector can\'t have two equal values</string>
+    <string name="check_engine_button">Check Engine (debug — removed later)</string>
+    <string name="check_engine_title">Engine Check — Daily</string>
+    <string name="check_engine_running">Running engine…</string>
+    <string name="check_engine_no_forms">No forms exist yet for this General Action — create one and fill parameters first</string>
 </resources>
