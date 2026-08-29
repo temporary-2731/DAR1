@@ -6,6 +6,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.dar.app.data.AppDatabase
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 /**
  * Temporary debug screen: runs the Daily engine against real data and shows every step
