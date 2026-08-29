@@ -96,9 +96,9 @@ class FormListActivity : AppCompatActivity() {
             }
 
             itemView.setOnClickListener {
-                val intent = Intent(this, FormDetailActivity::class.java).apply {
-                    putExtra(FormDetailActivity.EXTRA_FORM_ID, form.id)
-                    putExtra(FormDetailActivity.EXTRA_GENERAL_ACTION_ID, generalActionId)
+                val intent = Intent(this, WeekdaySelectActivity::class.java).apply {
+                    putExtra(WeekdaySelectActivity.EXTRA_FORM_ID, form.id)
+                    putExtra(WeekdaySelectActivity.EXTRA_GENERAL_ACTION_ID, generalActionId)
                 }
                 startActivity(intent)
             }
