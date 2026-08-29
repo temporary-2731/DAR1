@@ -193,4 +193,12 @@
     <string name="check_engine_title">Engine Check — Daily</string>
     <string name="check_engine_running">Running engine…</string>
     <string name="check_engine_no_forms">No forms exist yet for this General Action — create one and fill parameters first</string>
+    <string name="weekday_select_title">Which day of the week?</string>  
+    <string name="weekday_sunday">Sunday</string>
+    <string name="weekday_monday">Monday</string>
+    <string name="weekday_tuesday">Tuesday</string>
+    <string name="weekday_wednesday">Wednesday</string>
+    <string name="weekday_thursday">Thursday</string>
+    <string name="weekday_friday">Friday</string>
+    <string name="weekday_saturday">Saturday</string>
 </resources>
