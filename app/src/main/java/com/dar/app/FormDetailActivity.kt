@@ -15,21 +15,17 @@ import com.dar.app.data.AppDatabase
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-/**
- * Rigid parameter-entry grid for one Form. Each Action gets a fixed row; only the values
- * inside can change (no add/remove of rows or cells, matching the spec). Vectors are
- * entered as comma-separated numbers for now — see the note in chat about this being a
- * simplified input compared to Recording's full per-cell grid, which we can upgrade later.
- */
 class FormDetailActivity : AppCompatActivity() {
 
     private lateinit var db: AppDatabase
     private var formId: Long = -1L
     private var generalActionId: Long = -1L
+    private var weekday: Int = 1
     private var isEditable = true
 
     private lateinit var container: LinearLayout
     private lateinit var btnEditToggle: Button
+    private lateinit var weekdayTitle: TextView
 
     private data class RowRefs(
         val action: ActionEntity,
@@ -46,6 +42,9 @@ class FormDetailActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_FORM_ID = "extra_form_id"
         const val EXTRA_GENERAL_ACTION_ID = "extra_general_action_id"
+        const val EXTRA_WEEKDAY = "extra_weekday"
+
+        private val weekdayNames = listOf("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -54,10 +53,14 @@ class FormDetailActivity : AppCompatActivity() {
 
         formId = intent.getLongExtra(EXTRA_FORM_ID, -1L)
         generalActionId = intent.getLongExtra(EXTRA_GENERAL_ACTION_ID, -1L)
+        weekday = intent.getIntExtra(EXTRA_WEEKDAY, 1)
         db = AppDatabase.getInstance(applicationContext)
 
         container = findViewById(R.id.param_rows_container)
         btnEditToggle = findViewById(R.id.btn_param_edit_toggle)
+        weekdayTitle = findViewById(R.id.param_weekday_title)
+        weekdayTitle.text = weekdayNames[weekday - 1]
+
         findViewById<Button>(R.id.btn_param_save).setOnClickListener { attemptSave() }
         btnEditToggle.setOnClickListener { toggleEdit() }
 
@@ -87,6 +90,7 @@ class FormDetailActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val actions = db.generalActionDao().getActionsInGeneral(generalActionId).first()
             val existingParams = db.analysisFormDao().getParamsForForm(formId).first()
+                .filter { it.weekday == weekday }
 
             container.removeAllViews()
             rowRefs.clear()
@@ -121,7 +125,6 @@ class FormDetailActivity : AppCompatActivity() {
     }
 
     private fun refreshGeneralRow() {
-        // Derived, read-only: concatenation of every member Action's vectors.
         val allTime = mutableListOf<String>()
         val allDuration = mutableListOf<String>()
         val allQuan1 = mutableListOf<String>()
@@ -141,8 +144,6 @@ class FormDetailActivity : AppCompatActivity() {
         return text.split(",").map { it.trim() }.filter { it.isNotEmpty() }
     }
 
-    /** Validates: dimension 1–10, each vector's length matches dimension, no negatives,
-     *  all numeric, and Time vector has no duplicate values within its own row. */
     private fun validate(): Boolean {
         for ((index, row) in rowRefs.withIndex()) {
             val rowNumber = index + 1
@@ -161,7 +162,7 @@ class FormDetailActivity : AppCompatActivity() {
                 "Duration" to durationValues,
                 "Quan1" to quan1Values
             )) {
-                if (values.isEmpty()) continue // allowed to leave a metric fully empty
+                if (values.isEmpty()) continue
                 if (values.size != dimension) {
                     Toast.makeText(
                         this,
@@ -181,9 +182,7 @@ class FormDetailActivity : AppCompatActivity() {
                 }
             }
 
-            if (timeValues.size == timeValues.toSet().size) {
-                // ok, no duplicates
-            } else {
+            if (timeValues.size != timeValues.toSet().size) {
                 Toast.makeText(this, getString(R.string.param_time_duplicate, rowNumber), Toast.LENGTH_LONG).show()
                 return false
             }
@@ -196,6 +195,7 @@ class FormDetailActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             val existingParams = db.analysisFormDao().getParamsForForm(formId).first()
+                .filter { it.weekday == weekday }
 
             for (row in rowRefs) {
                 val dimension = row.dimensionField.text.toString().trim().toIntOrNull() ?: 1
@@ -209,6 +209,7 @@ class FormDetailActivity : AppCompatActivity() {
                         AnalysisFormActionParam(
                             formId = formId,
                             actionId = row.action.id,
+                            weekday = weekday,
                             dimension = dimension,
                             timeVector = timeVector,
                             durationVector = durationVector,
