@@ -8,11 +8,6 @@ import com.dar.app.data.AppDatabase
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-/**
- * Temporary debug screen: runs the Daily engine against real data and shows every step
- * of its computation, plus the final structured results. This screen is meant to be
- * deleted once the Report section exists and can display results properly.
- */
 class EngineCheckActivity : AppCompatActivity() {
 
     companion object {
@@ -48,12 +43,12 @@ class EngineCheckActivity : AppCompatActivity() {
                 for (action in result.actionStats) {
                     if (action.occurrenceCount == 0) continue
                     builder.appendLine("  ${action.actionName}: occurrences=${action.occurrenceCount}")
-                    builder.appendLine("    Time stdDev=${format(action.avgStdDevTime)}")
-                    builder.appendLine("    Duration total=${format(action.totalDurationSum)} stdDev=${format(action.avgStdDevDuration)} pct=${format(action.durationPercentage)}")
-                    builder.appendLine("    Quan1 total=${format(action.totalQuan1Sum)} stdDev=${format(action.avgStdDevQuan1)} pct=${format(action.quan1Percentage)}")
+                    builder.appendLine("    Time distance=${format(action.avgDistanceTime)} variation=${format(action.avgVariationTime)}")
+                    builder.appendLine("    Duration total=${format(action.totalDurationSum)} distance=${format(action.avgDistanceDuration)} variation=${format(action.avgVariationDuration)} pct=${format(action.durationPercentage)}")
+                    builder.appendLine("    Quan1 total=${format(action.totalQuan1Sum)} distance=${format(action.avgDistanceQuan1)} variation=${format(action.avgVariationQuan1)} pct=${format(action.quan1Percentage)}")
                 }
-                builder.appendLine("  GENERAL: duration total=${format(result.generalDurationTotal)} stdDev=${format(result.generalDurationAvgStdDev)}")
-                builder.appendLine("  GENERAL: quan1 total=${format(result.generalQuan1Total)} stdDev=${format(result.generalQuan1AvgStdDev)}")
+                builder.appendLine("  GENERAL: duration total=${format(result.generalDurationTotal)} avgVariation=${format(result.generalDurationAvgVariation)}")
+                builder.appendLine("  GENERAL: quan1 total=${format(result.generalQuan1Total)} avgVariation=${format(result.generalQuan1AvgVariation)}")
                 builder.appendLine()
             }
             resultsView.text = builder.toString()
