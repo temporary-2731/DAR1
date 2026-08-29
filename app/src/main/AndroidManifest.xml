@@ -29,6 +29,7 @@
         <activity android:name=".FormListActivity" android:exported="false" />
         <activity android:name=".FormDetailActivity" android:exported="false" />
         <activity android:name=".EngineCheckActivity" android:exported="false" />
+        <activity android:name=".WeekdaySelectActivity" android:exported="false" />
 
     </application>
 
