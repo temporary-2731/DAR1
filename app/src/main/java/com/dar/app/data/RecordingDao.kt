@@ -26,4 +26,7 @@ interface RecordingDao {
 
     @Query("SELECT DISTINCT date FROM recording_row WHERE dslaId = :dslaId")
     fun getDistinctDates(dslaId: Long): Flow<List<String>>
+
+    @Query("SELECT * FROM recording_row WHERE dslaId = :dslaId")
+    suspend fun getAllRowsForDsla(dslaId: Long): List<RecordingRow>
 }
