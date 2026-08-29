@@ -10,17 +10,16 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.sqrt
 
 /**
- * Daily analysis engine per your spec: Gregorian 2-month "seasons," grouped by weekday,
- * comparing recorded data against each covering form's parameter vectors as a
- * "deviation from goal." 24-hour time and Gregorian calendar only — 12-hour and Ethiopian
- * calendar are deferred, per our agreed sequencing.
- *
- * Set [debugEnabled] = true before calling to populate [debugLog] with a full step-by-step
- * trace, used by the temporary Engine Check screen.
+ * Daily analysis engine per your spec. Corrected deviation formula: for each occurrence,
+ * scalar distance = sqrt(Σ(recorded_i - param_i)²) (Euclidean distance between the two
+ * vectors), and average variation = mean(|recorded_i - param_i|) across the vector's
+ * elements. Both are then averaged again across every occurrence in the season (e.g. all
+ * 8-9 Mondays). Parameters are now looked up per-weekday, matching the corrected data model.
  */
 class DailyAnalysisEngine(private val db: AppDatabase) {
 
@@ -35,8 +34,8 @@ class DailyAnalysisEngine(private val db: AppDatabase) {
     }
 
     data class SeasonRange(val label: String, val start: Date, val end: Date)
-
-    private data class MetricResult(val avgStdDev: Double?, val totalSum: Double, val percentage: Double?)
+    private data class ParamKey(val formId: Long, val actionId: Long, val weekday: Int)
+    private data class MetricResult(val avgDistance: Double?, val avgVariation: Double?, val totalSum: Double, val percentage: Double?)
 
     suspend fun computeAllTime(dslaId: Long, generalActionId: Long): List<GeneralActionSeasonStat> {
         debugLog.clear()
@@ -73,9 +72,7 @@ class DailyAnalysisEngine(private val db: AppDatabase) {
         val results = mutableListOf<GeneralActionSeasonStat>()
         for (season in seasons) {
             for (weekday in 1..7) {
-                val stat = computeSeasonWeekday(
-                    actions, forms, paramCache, allRows, season, weekday, rangeStart, rangeEnd
-                )
+                val stat = computeSeasonWeekday(actions, forms, paramCache, allRows, season, weekday, rangeStart, rangeEnd)
                 if (stat.actionStats.any { it.occurrenceCount > 0 }) {
                     results.add(stat)
                 }
@@ -85,12 +82,12 @@ class DailyAnalysisEngine(private val db: AppDatabase) {
         return results
     }
 
-    private suspend fun buildParamCache(forms: List<AnalysisForm>): Map<Pair<Long, Long>, AnalysisFormActionParam> {
-        val map = mutableMapOf<Pair<Long, Long>, AnalysisFormActionParam>()
+    private suspend fun buildParamCache(forms: List<AnalysisForm>): Map<ParamKey, AnalysisFormActionParam> {
+        val map = mutableMapOf<ParamKey, AnalysisFormActionParam>()
         for (form in forms) {
             val params = db.analysisFormDao().getParamsForForm(form.id).first()
             for (p in params) {
-                map[form.id to p.actionId] = p
+                map[ParamKey(form.id, p.actionId, p.weekday)] = p
             }
         }
         return map
@@ -99,7 +96,7 @@ class DailyAnalysisEngine(private val db: AppDatabase) {
     fun computeSeasonWeekday(
         actions: List<ActionEntity>,
         forms: List<AnalysisForm>,
-        paramCache: Map<Pair<Long, Long>, AnalysisFormActionParam>,
+        paramCache: Map<ParamKey, AnalysisFormActionParam>,
         allRows: List<RecordingRow>,
         season: SeasonRange,
         weekday: Int,
@@ -113,16 +110,16 @@ class DailyAnalysisEngine(private val db: AppDatabase) {
 
         val actionStats = mutableListOf<ActionSeasonStat>()
         for (action in actions) {
-            actionStats.add(computeActionForOccurrences(action, occurrenceDates, forms, paramCache, allRows))
+            actionStats.add(computeActionForOccurrences(action, occurrenceDates, weekday, forms, paramCache, allRows))
         }
 
         val generalDurationTotal = actionStats.sumOf { it.totalDurationSum }
-        val generalDurationStdDev = averageOf(actionStats.mapNotNull { it.avgStdDevDuration })
+        val generalDurationAvgVariation = averageOf(actionStats.mapNotNull { it.avgVariationDuration })
         val generalQuan1Total = actionStats.sumOf { it.totalQuan1Sum }
-        val generalQuan1StdDev = averageOf(actionStats.mapNotNull { it.avgStdDevQuan1 })
+        val generalQuan1AvgVariation = averageOf(actionStats.mapNotNull { it.avgVariationQuan1 })
 
         if (actionStats.any { it.occurrenceCount > 0 }) {
-            log("General rollup — duration total: $generalDurationTotal, avg std dev: $generalDurationStdDev, quan1 total: $generalQuan1Total, avg std dev: $generalQuan1StdDev")
+            log("General rollup — duration total: $generalDurationTotal, avg variation: $generalDurationAvgVariation, quan1 total: $generalQuan1Total, avg variation: $generalQuan1AvgVariation")
         }
 
         return GeneralActionSeasonStat(
@@ -130,17 +127,18 @@ class DailyAnalysisEngine(private val db: AppDatabase) {
             weekdayName = weekdayNames[weekday - 1],
             actionStats = actionStats,
             generalDurationTotal = generalDurationTotal,
-            generalDurationAvgStdDev = generalDurationStdDev,
+            generalDurationAvgVariation = generalDurationAvgVariation,
             generalQuan1Total = generalQuan1Total,
-            generalQuan1AvgStdDev = generalQuan1StdDev
+            generalQuan1AvgVariation = generalQuan1AvgVariation
         )
     }
 
     private fun computeActionForOccurrences(
         action: ActionEntity,
         occurrenceDates: List<Date>,
+        weekday: Int,
         forms: List<AnalysisForm>,
-        paramCache: Map<Pair<Long, Long>, AnalysisFormActionParam>,
+        paramCache: Map<ParamKey, AnalysisFormActionParam>,
         allRows: List<RecordingRow>
     ): ActionSeasonStat {
         var maxDimension = 1
@@ -157,12 +155,12 @@ class DailyAnalysisEngine(private val db: AppDatabase) {
             }
             if (form == null) {
                 log("  [${action.name}] $dateStr: no covering form — gap, excluded per spec.")
-                continue // missing day (gap between forms) — excluded per spec
+                continue
             }
 
-            val param = paramCache[form.id to action.id]
+            val param = paramCache[ParamKey(form.id, action.id, weekday)]
             if (param == null) {
-                log("  [${action.name}] $dateStr: form ${form.id} has no parameters entered yet — excluded.")
+                log("  [${action.name}] $dateStr: no parameters entered for ${weekdayNames[weekday - 1]} in form ${form.id} — excluded.")
                 continue
             }
             maxDimension = maxOf(maxDimension, param.dimension)
@@ -190,7 +188,7 @@ class DailyAnalysisEngine(private val db: AppDatabase) {
 
         if (perOccurrenceDuration.isEmpty()) {
             return ActionSeasonStat(
-                action.id, action.name, 0, null, null, 0.0, null, null, 0.0, null
+                action.id, action.name, 0, null, null, null, null, 0.0, null, null, null, 0.0, null
             )
         }
 
@@ -198,30 +196,43 @@ class DailyAnalysisEngine(private val db: AppDatabase) {
         val durationResult = computeMetric(padAllTo(perOccurrenceDuration, maxDimension), needsPercentage = true)
         val quan1Result = computeMetric(padAllTo(perOccurrenceQuan1, maxDimension), needsPercentage = true)
 
-        log("  [${action.name}] TIME stdDev=${timeResult.avgStdDev} | DURATION total=${durationResult.totalSum} stdDev=${durationResult.avgStdDev} pct=${durationResult.percentage} | QUAN1 total=${quan1Result.totalSum} stdDev=${quan1Result.avgStdDev} pct=${quan1Result.percentage}")
+        log("  [${action.name}] TIME dist=${timeResult.avgDistance} var=${timeResult.avgVariation} | DURATION total=${durationResult.totalSum} dist=${durationResult.avgDistance} var=${durationResult.avgVariation} pct=${durationResult.percentage} | QUAN1 total=${quan1Result.totalSum} dist=${quan1Result.avgDistance} var=${quan1Result.avgVariation} pct=${quan1Result.percentage}")
 
         return ActionSeasonStat(
             actionId = action.id,
             actionName = action.name,
             occurrenceCount = perOccurrenceDuration.size,
-            avgStdDevTime = timeResult.avgStdDev,
-            avgStdDevDuration = durationResult.avgStdDev,
+            avgDistanceTime = timeResult.avgDistance,
+            avgVariationTime = timeResult.avgVariation,
+            avgDistanceDuration = durationResult.avgDistance,
+            avgVariationDuration = durationResult.avgVariation,
             totalDurationSum = durationResult.totalSum,
             durationPercentage = durationResult.percentage,
-            avgStdDevQuan1 = quan1Result.avgStdDev,
+            avgDistanceQuan1 = quan1Result.avgDistance,
+            avgVariationQuan1 = quan1Result.avgVariation,
             totalQuan1Sum = quan1Result.totalSum,
             quan1Percentage = quan1Result.percentage
         )
     }
 
+    /** Per occurrence: distance = sqrt(Σ(R-P)²); variation = mean(|R-P|) across dims.
+     *  Both are then averaged across every occurrence supplied. */
     private fun computeMetric(perOccurrence: List<Pair<List<Double>, List<Double>>>, needsPercentage: Boolean): MetricResult {
-        if (perOccurrence.isEmpty()) return MetricResult(null, 0.0, null)
+        if (perOccurrence.isEmpty()) return MetricResult(null, null, 0.0, null)
 
-        val deviationVectors = perOccurrence.map { (recorded, param) ->
-            recorded.indices.map { recorded[it] - param[it] }
+        val distances = mutableListOf<Double>()
+        val variations = mutableListOf<Double>()
+
+        for ((recorded, param) in perOccurrence) {
+            val diffs = recorded.indices.map { recorded[it] - param[it] }
+            val distance = sqrt(diffs.sumOf { it * it })
+            val variation = diffs.map { abs(it) }.average()
+            distances.add(distance)
+            variations.add(variation)
         }
-        val stdDevVector = elementwiseStdDev(deviationVectors)
-        val avgStdDev = averageOf(stdDevVector)
+
+        val avgDistance = distances.average()
+        val avgVariation = variations.average()
         val totalSum = perOccurrence.sumOf { it.first.sum() }
 
         val percentage = if (!needsPercentage) {
@@ -230,7 +241,7 @@ class DailyAnalysisEngine(private val db: AppDatabase) {
             val paramSum = perOccurrence.sumOf { it.second.sum() }
             if (paramSum == 0.0) null else (totalSum / paramSum) * 100.0
         }
-        return MetricResult(avgStdDev, totalSum, percentage)
+        return MetricResult(avgDistance, avgVariation, totalSum, percentage)
     }
 
     private fun padAllTo(list: List<Pair<List<Double>, List<Double>>>, dimension: Int): List<Pair<List<Double>, List<Double>>> {
@@ -263,16 +274,6 @@ class DailyAnalysisEngine(private val db: AppDatabase) {
         if (csv.isBlank()) return List(dimension) { 0.0 }
         val parsed = csv.split(",").map { parser(it.trim()) ?: 0.0 }
         return padTo(parsed, dimension)
-    }
-
-    private fun elementwiseStdDev(vectors: List<List<Double>>): List<Double> {
-        if (vectors.isEmpty()) return emptyList()
-        val dim = vectors[0].size
-        return (0 until dim).map { d ->
-            val values = vectors.map { it[d] }
-            val mean = values.average()
-            sqrt(values.sumOf { (it - mean) * (it - mean) } / values.size)
-        }
     }
 
     private fun averageOf(values: List<Double>): Double? {
