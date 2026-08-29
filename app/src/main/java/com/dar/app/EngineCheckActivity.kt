@@ -63,5 +63,3 @@ class EngineCheckActivity : AppCompatActivity() {
         return if (value == null) "—" else String.format(Locale.getDefault(), "%.2f", value)
     }
 }
-
-private val Locale.Companion.getDefault: () -> java.util.Locale get() = { java.util.Locale.getDefault() }
