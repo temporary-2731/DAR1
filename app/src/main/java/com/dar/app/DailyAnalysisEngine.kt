@@ -34,7 +34,7 @@ class DailyAnalysisEngine(private val db: AppDatabase) {
     }
 
     data class SeasonRange(val label: String, val start: Date, val end: Date)
-    private data class ParamKey(val formId: Long, val actionId: Long, val weekday: Int)
+    data class ParamKey(val formId: Long, val actionId: Long, val weekday: Int)
     private data class MetricResult(val avgDistance: Double?, val avgVariation: Double?, val totalSum: Double, val percentage: Double?)
 
     suspend fun computeAllTime(dslaId: Long, generalActionId: Long): List<GeneralActionSeasonStat> {
@@ -215,8 +215,6 @@ class DailyAnalysisEngine(private val db: AppDatabase) {
         )
     }
 
-    /** Per occurrence: distance = sqrt(Σ(R-P)²); variation = mean(|R-P|) across dims.
-     *  Both are then averaged across every occurrence supplied. */
     private fun computeMetric(perOccurrence: List<Pair<List<Double>, List<Double>>>, needsPercentage: Boolean): MetricResult {
         if (perOccurrence.isEmpty()) return MetricResult(null, null, 0.0, null)
 
