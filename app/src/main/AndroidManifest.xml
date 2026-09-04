@@ -30,6 +30,8 @@
         <activity android:name=".FormDetailActivity" android:exported="false" />
         <activity android:name=".EngineCheckActivity" android:exported="false" />
         <activity android:name=".WeekdaySelectActivity" android:exported="false" />
+        <activity android:name=".AutoFillPickerActivity" android:exported="false" />
+        <activity android:name=".WeeklyEngineCheckActivity" android:exported="false" />
 
     </application>
 
