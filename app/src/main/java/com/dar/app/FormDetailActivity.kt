@@ -1,5 +1,6 @@
 package com.dar.app
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.widget.Button
@@ -43,6 +44,7 @@ class FormDetailActivity : AppCompatActivity() {
         const val EXTRA_FORM_ID = "extra_form_id"
         const val EXTRA_GENERAL_ACTION_ID = "extra_general_action_id"
         const val EXTRA_WEEKDAY = "extra_weekday"
+        private const val REQUEST_AUTO_FILL = 701
 
         private val weekdayNames = listOf("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
     }
@@ -62,6 +64,7 @@ class FormDetailActivity : AppCompatActivity() {
         weekdayTitle.text = weekdayNames[weekday - 1]
 
         findViewById<Button>(R.id.btn_param_save).setOnClickListener { attemptSave() }
+        findViewById<Button>(R.id.btn_param_auto_fill).setOnClickListener { openAutoFillPicker() }
         btnEditToggle.setOnClickListener { toggleEdit() }
 
         generalTimeText = findViewById(R.id.general_time_value)
@@ -69,6 +72,24 @@ class FormDetailActivity : AppCompatActivity() {
         generalQuan1Text = findViewById(R.id.general_quan1_value)
 
         loadRows()
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_AUTO_FILL && resultCode == RESULT_OK) {
+            val count = data?.getIntExtra(AutoFillPickerActivity.RESULT_COPIED_COUNT, 0) ?: 0
+            Toast.makeText(this, getString(R.string.auto_fill_result, count), Toast.LENGTH_SHORT).show()
+            loadRows()
+        }
+    }
+
+    private fun openAutoFillPicker() {
+        val intent = Intent(this, AutoFillPickerActivity::class.java).apply {
+            putExtra(AutoFillPickerActivity.EXTRA_TARGET_FORM_ID, formId)
+            putExtra(AutoFillPickerActivity.EXTRA_TARGET_WEEKDAY, weekday)
+            putExtra(AutoFillPickerActivity.EXTRA_TARGET_GENERAL_ACTION_ID, generalActionId)
+        }
+        startActivityForResult(intent, REQUEST_AUTO_FILL)
     }
 
     private fun toggleEdit() {
