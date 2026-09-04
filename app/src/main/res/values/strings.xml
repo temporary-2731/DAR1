@@ -206,5 +206,8 @@
 <string name="auto_fill_result">Auto-filled %1$d Action(s)</string>
 <string name="form_mirrored">A matching %1$s form was also created</string>
    <string name="form_mirror_skipped">Couldn\'t mirror to %1$s (dates already used there)</string>
+<string name="param_save_and_mirrored">Saved and synced to the linked form</string>
+<string name="auto_fill_no_other_forms">No other Daily/Weekly forms exist yet to copy from</string>
+<string name="auto_fill_source_empty">That form/day has no saved parameters to copy</string>
 
 </resources>
