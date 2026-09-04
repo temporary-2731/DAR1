@@ -16,12 +16,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * Lists every Daily/Weekly form across the DSLA (all General Actions), grouped by
- * General Action name / period type / form number, with 7 weekday buttons each.
- * Tapping a weekday copies every parameter row whose Action also belongs to the
- * TARGET form's General Action into the target form/weekday — matching by Action
- * identity, which is meaningful even across different General Actions since one
- * Action can be a member of several.
+ * Lists every Daily/Weekly form across the DSLA, with 7 weekday buttons each. Tapping a
+ * weekday copies every parameter row whose Action also belongs to the TARGET form's
+ * General Action into the target form/weekday — matched by Action identity, which stays
+ * meaningful across different General Actions since one Action can belong to several.
  */
 class AutoFillPickerActivity : AppCompatActivity() {
 
@@ -55,11 +53,7 @@ class AutoFillPickerActivity : AppCompatActivity() {
 
     private fun loadForms() {
         lifecycleScope.launch {
-            val currentForm = db.analysisFormDao().let { dao ->
-                // getFormsForDsla returns all; we need this form's dslaId to scope the picker.
-                null
-            }
-            val targetFormRecord = findFormById(targetFormId)
+            val targetFormRecord = db.analysisFormDao().getFormById(targetFormId)
             if (targetFormRecord == null) {
                 Toast.makeText(this@AutoFillPickerActivity, "Form not found", Toast.LENGTH_SHORT).show()
                 finish()
@@ -69,29 +63,21 @@ class AutoFillPickerActivity : AppCompatActivity() {
             val allForms = db.analysisFormDao().getDailyAndWeeklyFormsForDsla(targetFormRecord.dslaId)
             val generalActions = db.generalActionDao().getAllForDsla(targetFormRecord.dslaId).first()
 
+            container.removeAllViews()
+            var anyShown = false
             for (form in allForms) {
-                if (form.id == targetFormId) continue // skip copying a form onto itself
+                if (form.id == targetFormId) continue
                 val generalName = generalActions.firstOrNull { it.id == form.generalActionId }?.name ?: "GA#${form.generalActionId}"
                 renderFormEntry(form, generalName)
+                anyShown = true
             }
-        }
-    }
 
-    private suspend fun findFormById(formId: Long): AnalysisForm? {
-        // AnalysisFormDao has no direct getById; reconstruct via a broad scan since
-        // this screen is only reachable with a valid formId from FormDetailActivity.
-        val dslaGuess = db.generalActionDao().getAllForDsla(targetGeneralActionId).let { null } // placeholder, replaced below
-        return db.analysisFormDao().let { dao ->
-            // Fallback: scan all forms belonging to targetGeneralActionId's DSLA by
-            // first resolving the DSLA via the General Action.
-            val ga = db.generalActionDao().let { null } // not used; see direct query below
-            null
-        } ?: run {
-            // Direct approach: query both DAILY and WEEKLY forms for this General Action
-            // and find the matching id.
-            val daily = db.analysisFormDao().getFormsForOnce(targetGeneralActionId, "DAILY")
-            val weekly = db.analysisFormDao().getFormsForOnce(targetGeneralActionId, "WEEKLY")
-            (daily + weekly).firstOrNull { it.id == targetFormId }
+            if (!anyShown) {
+                val empty = TextView(this@AutoFillPickerActivity)
+                empty.text = getString(R.string.auto_fill_no_other_forms)
+                empty.setTextColor(android.graphics.Color.DKGRAY)
+                container.addView(empty)
+            }
         }
     }
 
@@ -101,7 +87,8 @@ class AutoFillPickerActivity : AppCompatActivity() {
         val row1 = entryView.findViewById<LinearLayout>(R.id.auto_fill_weekday_row_1)
         val row2 = entryView.findViewById<LinearLayout>(R.id.auto_fill_weekday_row_2)
 
-        title.text = "$generalName — ${form.periodType} — (${form.beginDate}${if (form.endDate != null) " to ${form.endDate}" else " ongoing"})"
+        val rangeText = if (form.endDate != null) "${form.beginDate} — ${form.endDate}" else "${form.beginDate} — ongoing"
+        title.text = "$generalName — ${form.periodType} — ($rangeText)"
 
         for (weekday in 1..7) {
             val btn = Button(this)
@@ -124,6 +111,11 @@ class AutoFillPickerActivity : AppCompatActivity() {
 
             val sourceParams = db.analysisFormDao().getParamsForFormWeekdayOnce(sourceFormId, sourceWeekday)
             val existingTargetParams = db.analysisFormDao().getParamsForFormWeekdayOnce(targetFormId, targetWeekday)
+
+            if (sourceParams.isEmpty()) {
+                Toast.makeText(this@AutoFillPickerActivity, R.string.auto_fill_source_empty, Toast.LENGTH_SHORT).show()
+                return@launch
+            }
 
             var copiedCount = 0
             for (sourceParam in sourceParams) {
