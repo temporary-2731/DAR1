@@ -15,6 +15,9 @@ interface AnalysisFormDao {
     @Delete
     suspend fun deleteForm(form: AnalysisForm)
 
+    @Query("SELECT * FROM analysis_form WHERE id = :formId LIMIT 1")
+    suspend fun getFormById(formId: Long): AnalysisForm?
+
     @Query("SELECT * FROM analysis_form WHERE generalActionId = :generalActionId AND periodType = :periodType ORDER BY beginDate ASC")
     fun getFormsFor(generalActionId: Long, periodType: String): Flow<List<AnalysisForm>>
 
@@ -32,6 +35,9 @@ interface AnalysisFormDao {
 
     @Query("SELECT * FROM analysis_form_action_param WHERE formId = :formId")
     fun getParamsForForm(formId: Long): Flow<List<AnalysisFormActionParam>>
+
+    @Query("SELECT * FROM analysis_form_action_param WHERE formId = :formId")
+    suspend fun getParamsForFormOnce(formId: Long): List<AnalysisFormActionParam>
 
     @Query("SELECT * FROM analysis_form_action_param WHERE formId = :formId AND weekday = :weekday")
     suspend fun getParamsForFormWeekdayOnce(formId: Long, weekday: Int): List<AnalysisFormActionParam>
