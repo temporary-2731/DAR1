@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.dar.app.data.ActionEntity
+import com.dar.app.data.AnalysisForm
 import com.dar.app.data.AnalysisFormActionParam
 import com.dar.app.data.AppDatabase
 import kotlinx.coroutines.flow.first
@@ -248,8 +249,94 @@ class FormDetailActivity : AppCompatActivity() {
                     )
                 }
             }
+
+            val mirrorSynced = ensureMirrorFormAndSyncWeekday()
+
             refreshGeneralRow()
-            Toast.makeText(this@FormDetailActivity, R.string.param_save, Toast.LENGTH_SHORT).show()
+            if (mirrorSynced) {
+                Toast.makeText(this@FormDetailActivity, R.string.param_save_and_mirrored, Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this@FormDetailActivity, R.string.param_save, Toast.LENGTH_SHORT).show()
+            }
         }
+    }
+
+    /**
+     * Finds (or creates, if missing) the linked Daily/Weekly twin form covering the exact
+     * same dates as this one, then copies this weekday's just-saved parameters into it —
+     * keeping Daily and Weekly permanently in sync, in both directions, for both new and
+     * previously-unlinked forms.
+     */
+    private suspend fun ensureMirrorFormAndSyncWeekday(): Boolean {
+        val currentForm = db.analysisFormDao().getFormById(formId) ?: return false
+        val otherType = when (currentForm.periodType) {
+            "DAILY" -> "WEEKLY"
+            "WEEKLY" -> "DAILY"
+            else -> return false
+        }
+
+        val candidateMirrors = db.analysisFormDao().getFormsForOnce(currentForm.generalActionId, otherType)
+        var mirrorForm: AnalysisForm? = candidateMirrors.firstOrNull {
+            it.beginDate == currentForm.beginDate && it.endDate == currentForm.endDate
+        }
+
+        if (mirrorForm == null) {
+            val overlaps = candidateMirrors.any { rangesOverlap(currentForm.beginDate, currentForm.endDate, it.beginDate, it.endDate) }
+            if (overlaps) {
+                return false // can't create a mirror that would overlap an unrelated existing form
+            }
+            val newId = db.analysisFormDao().insertForm(
+                AnalysisForm(
+                    dslaId = currentForm.dslaId,
+                    generalActionId = currentForm.generalActionId,
+                    periodType = otherType,
+                    beginDate = currentForm.beginDate,
+                    endDate = currentForm.endDate
+                )
+            )
+            mirrorForm = db.analysisFormDao().getFormById(newId) ?: return false
+        }
+
+        val currentWeekdayParams = db.analysisFormDao().getParamsForFormWeekdayOnce(formId, weekday)
+        val mirrorExistingParams = db.analysisFormDao().getParamsForFormWeekdayOnce(mirrorForm.id, weekday)
+
+        for (sourceParam in currentWeekdayParams) {
+            val existingMirrorParam = mirrorExistingParams.firstOrNull { it.actionId == sourceParam.actionId }
+            if (existingMirrorParam == null) {
+                db.analysisFormDao().insertParam(
+                    AnalysisFormActionParam(
+                        formId = mirrorForm.id,
+                        actionId = sourceParam.actionId,
+                        weekday = weekday,
+                        dimension = sourceParam.dimension,
+                        timeVector = sourceParam.timeVector,
+                        durationVector = sourceParam.durationVector,
+                        quan1Vector = sourceParam.quan1Vector
+                    )
+                )
+            } else {
+                db.analysisFormDao().updateParam(
+                    existingMirrorParam.copy(
+                        dimension = sourceParam.dimension,
+                        timeVector = sourceParam.timeVector,
+                        durationVector = sourceParam.durationVector,
+                        quan1Vector = sourceParam.quan1Vector
+                    )
+                )
+            }
+        }
+        return true
+    }
+
+    private fun rangesOverlap(beginA: String, endA: String?, beginB: String, endB: String?): Boolean {
+        val sdf = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+        val startA = sdf.parse(beginA) ?: return true
+        val finishA = endA?.let { sdf.parse(it) }
+        val startB = sdf.parse(beginB) ?: return true
+        val finishB = endB?.let { sdf.parse(it) }
+
+        val aEndsAfterBStarts = finishA == null || !finishA.before(startB)
+        val bEndsAfterAStarts = finishB == null || !finishB.before(startA)
+        return aEndsAfterBStarts && bEndsAfterAStarts
     }
 }
