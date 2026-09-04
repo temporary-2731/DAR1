@@ -50,9 +50,10 @@ class FormListActivity : AppCompatActivity() {
     }
 
     private fun openEngineCheck() {
-        val intent = Intent(this, EngineCheckActivity::class.java).apply {
-            putExtra(EngineCheckActivity.EXTRA_DSLA_ID, dslaId)
-            putExtra(EngineCheckActivity.EXTRA_GENERAL_ACTION_ID, generalActionId)
+        val target = if (periodType == "WEEKLY") WeeklyEngineCheckActivity::class.java else EngineCheckActivity::class.java
+        val intent = Intent(this, target).apply {
+            putExtra("extra_dsla_id", dslaId)
+            putExtra("extra_general_action_id", generalActionId)
         }
         startActivity(intent)
     }
@@ -162,6 +163,26 @@ class FormListActivity : AppCompatActivity() {
                             endDate = end
                         )
                     )
+
+                    // Mirror into the other Daily/Weekly period type, if it doesn't conflict.
+                    val otherType = if (periodType == "DAILY") "WEEKLY" else if (periodType == "WEEKLY") "DAILY" else null
+                    if (otherType != null) {
+                        val otherExisting = db.analysisFormDao().getFormsForOnce(generalActionId, otherType)
+                        if (!rangesOverlapAny(begin, end, otherExisting)) {
+                            db.analysisFormDao().insertForm(
+                                AnalysisForm(
+                                    dslaId = dslaId,
+                                    generalActionId = generalActionId,
+                                    periodType = otherType,
+                                    beginDate = begin,
+                                    endDate = end
+                                )
+                            )
+                            Toast.makeText(this@FormListActivity, getString(R.string.form_mirrored, otherType), Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(this@FormListActivity, getString(R.string.form_mirror_skipped, otherType), Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             }
             .setNegativeButton(R.string.form_cancel, null)
