@@ -1,27 +1,37 @@
 package com.dar.app
 
-/** One occurrence's (e.g. one Monday's) computed metric for a single vector comparison. */
 data class OccurrenceMetric(
     val date: String,
-    val distance: Double,           // sqrt(Σ(R-P)²)
-    val variation: Double,          // Σ|R-P|  (L1 norm — always >= distance, by the L2<=L1 inequality)
-    val rate: Double?,              // distance/variation as a percentage; null if variation is 0
-    val total: Double?,             // Σ R elements; null for Time (Time has no "total" concept)
-    val paramTotal: Double?,        // Σ P elements; null for Time
-    val comp: Double?               // total/paramTotal as a percentage; null if paramTotal is 0 or Time
+    val distance: Double,
+    val variation: Double,
+    val rate: Double?,
+    val total: Double?,       // this single occurrence's own daily total (level 1) — null for Time
+    val paramTotal: Double?,
+    val comp: Double?
 )
 
-/** Rolled-up stats across a set of occurrences (either one season's 8-9 weekdays, or the
- *  entire pooled history for that weekday across every season — same shape either way). */
+/**
+ * Rolled-up stats for one grouping (a season, a week, or "all-time"). totSum/avgTot are
+ * THIS grouping's own total/average (level 2 for a season/week; same fields double as
+ * level 3 when this aggregate represents the all-time pooled grouping itself).
+ * grandTotSum/grandAvgTot are the all-time (level 3) total/average, attached here too so
+ * every season/week-level result shows both its own total AND the all-time total side by
+ * side, rather than all-time being a separate disconnected entry.
+ */
 data class MetricAggregate(
     val occurrenceCount: Int,
     val avgDistance: Double?,
     val avgVariation: Double?,
-    val avgRate: Double?,           // average of each occurrence's own rate
-    val totSum: Double?,            // sum of totals across occurrences; null for Time
-    val avgTot: Double?,            // totSum / occurrenceCount; null for Time
-    val avgParamTotal: Double?,     // average of paramTotal across occurrences; null for Time
-    val compAvgTot: Double?         // avgTot / avgParamTotal as a percentage; null for Time
+    val avgRate: Double?,
+    val occurrenceTotals: List<Double> = emptyList(), // level 1 — raw per-day totals, for transparency
+    val totSum: Double?,          // level 2 — this season/week's own total
+    val avgTot: Double?,          // level 2 — this season/week's own average
+    val avgParamTotal: Double?,
+    val compAvgTot: Double?,
+    val grandTotSum: Double? = null,   // level 3 — all-time total (same value on every entry for this weekday/DSLA)
+    val grandAvgTot: Double? = null,   // level 3 — all-time average
+    val grandAvgParamTotal: Double? = null,
+    val grandCompAvgTot: Double? = null
 )
 
 data class ActionPeriodStat(
@@ -33,7 +43,7 @@ data class ActionPeriodStat(
 )
 
 data class GeneralPeriodStat(
-    val label: String,         // e.g. "May & Jun 2026" or "ALL TIME"
+    val label: String,
     val weekdayName: String,
     val actionStats: List<ActionPeriodStat>,
     val generalTime: MetricAggregate,
