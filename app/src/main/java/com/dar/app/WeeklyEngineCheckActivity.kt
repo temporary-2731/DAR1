@@ -51,18 +51,18 @@ class WeeklyEngineCheckActivity : AppCompatActivity() {
         }
     }
 
-    private fun metricBlock(label: String, m: MetricAggregate): String {
-        val sb = StringBuilder()
-        sb.append("$label: n=${m.occurrenceCount} ")
-        sb.append("avgDist=${format(m.avgDistance)} ")
-        sb.append("avgVar=${format(m.avgVariation)} ")
-        sb.append("avgRate=${formatPct(m.avgRate)}")
-        if (m.totSum != null) {
-            sb.append(" | totSum=${format(m.totSum)} avgTot=${format(m.avgTot)} avgParamTot=${format(m.avgParamTotal)} compAvgTot=${formatPct(m.compAvgTot)}")
-        }
-        return sb.toString()
+    private fun metricBlockNoTotal(label: String, m: MetricAggregate): String {
+        return "$label: n=${m.occurrenceCount} avgDist=${format(m.avgDistance)} avgVar=${format(m.avgVariation)} avgRate=${formatPct(m.avgRate)}"
     }
 
+    private fun metricBlockWithTotals(label: String, m: MetricAggregate): String {
+        val sb = StringBuilder()
+        sb.append("$label: n=${m.occurrenceCount} avgDist=${format(m.avgDistance)} avgVar=${format(m.avgVariation)} avgRate=${formatPct(m.avgRate)}\n")
+        sb.append("      L1 daily totals: [${m.occurrenceTotals.joinToString(", ") { format(it) }}]\n")
+        sb.append("      L2 week total=${format(m.totSum)} week avg=${format(m.avgTot)} (comp vs param=${formatPct(m.compAvgTot)})\n")
+        sb.append("      L3 all-time total=${format(m.grandTotSum)} all-time avg=${format(m.grandAvgTot)}")
+        return sb.toString()
+    }
     private fun format(value: Double?): String {
         return if (value == null) "—" else String.format(Locale.getDefault(), "%.2f", value)
     }
