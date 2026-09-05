@@ -42,29 +42,32 @@ class EngineCheckActivity : AppCompatActivity() {
                 builder.appendLine("${result.label} — ${result.weekdayName}")
                 for (action in result.actionStats) {
                     builder.appendLine("  [${action.actionName}] occurrences=${action.time.occurrenceCount}")
-                    builder.appendLine(metricBlock("    TIME", action.time))
-                    builder.appendLine(metricBlock("    DURATION", action.duration))
-                    builder.appendLine(metricBlock("    QUAN1", action.quan1))
+                    builder.appendLine(metricBlockNoTotal("    TIME", action.time))
+                    builder.appendLine(metricBlockWithTotals("    DURATION", action.duration))
+                    builder.appendLine(metricBlockWithTotals("    QUAN1", action.quan1))
                 }
                 builder.appendLine("  GENERAL:")
-                builder.appendLine(metricBlock("    TIME", result.generalTime))
-                builder.appendLine(metricBlock("    DURATION", result.generalDuration))
-                builder.appendLine(metricBlock("    QUAN1", result.generalQuan1))
+                builder.appendLine(metricBlockNoTotal("    TIME", result.generalTime))
+                builder.appendLine(metricBlockWithTotals("    DURATION", result.generalDuration))
+                builder.appendLine(metricBlockWithTotals("    QUAN1", result.generalQuan1))
                 builder.appendLine()
             }
             resultsView.text = builder.toString()
         }
     }
 
-    private fun metricBlock(label: String, m: MetricAggregate): String {
+    private fun metricBlockNoTotal(label: String, m: MetricAggregate): String {
+        return "$label: n=${m.occurrenceCount} avgDist=${format(m.avgDistance)} avgVar=${format(m.avgVariation)} avgRate=${formatPct(m.avgRate)}"
+    }
+
+    /** Shows all 3 total tiers: level 1 (daily, listed), level 2 (this season's own total+avg),
+     *  level 3 (all-time total+avg, same across every entry for this weekday). */
+    private fun metricBlockWithTotals(label: String, m: MetricAggregate): String {
         val sb = StringBuilder()
-        sb.append("$label: n=${m.occurrenceCount} ")
-        sb.append("avgDist=${format(m.avgDistance)} ")
-        sb.append("avgVar=${format(m.avgVariation)} ")
-        sb.append("avgRate=${formatPct(m.avgRate)}")
-        if (m.totSum != null) {
-            sb.append(" | totSum=${format(m.totSum)} avgTot=${format(m.avgTot)} avgParamTot=${format(m.avgParamTotal)} compAvgTot=${formatPct(m.compAvgTot)}")
-        }
+        sb.append("$label: n=${m.occurrenceCount} avgDist=${format(m.avgDistance)} avgVar=${format(m.avgVariation)} avgRate=${formatPct(m.avgRate)}\n")
+        sb.append("      L1 daily totals: [${m.occurrenceTotals.joinToString(", ") { format(it) }}]\n")
+        sb.append("      L2 season total=${format(m.totSum)} season avg=${format(m.avgTot)} (comp vs param=${formatPct(m.compAvgTot)})\n")
+        sb.append("      L3 all-time total=${format(m.grandTotSum)} all-time avg=${format(m.grandAvgTot)}")
         return sb.toString()
     }
 
