@@ -14,18 +14,6 @@ import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.sqrt
 
-/**
- * Daily analysis engine per your corrected spec:
- * - distance = sqrt(Σ(R-P)²)   (Euclidean distance)
- * - variation = Σ|R-P|          (L1 norm — this is what "variation" means now, not an average)
- * - rate = distance/variation as a percentage, per occurrence, then averaged
- * - total/paramTotal/comp only apply to Duration and Quan1, not Time
- * - General Action combines: distance via sqrt(Σ distance_action²), variation via Σ variation_action,
- *   total/paramTotal via Σ over actions — matching your worked Tg/Dg example exactly.
- *
- * No cross-occurrence dimension padding is needed: since distance/variation/total reduce to
- * scalars per occurrence, each occurrence just uses its own form's dimension independently.
- */
 class DailyAnalysisEngine(private val db: AppDatabase) {
 
     var debugEnabled: Boolean = false
@@ -86,12 +74,16 @@ class DailyAnalysisEngine(private val db: AppDatabase) {
             val allDates = weekdayOccurrencesAcrossRange(weekday, rangeStart, rangeEnd)
             if (allDates.isEmpty()) continue
 
-            // Per-action, per-date metrics across the ENTIRE history for this weekday.
+            // Per-action metrics for EVERY occurrence of this weekday across the whole DSLA.
             val perActionDateMetrics: Map<Long, List<DateMetrics>> = actions.associate { action ->
                 action.id to computeActionDateMetrics(action, allDates, forms, paramCache, allRows, weekday)
             }
 
-            // Season-level breakdown.
+            // Grand (all-time, level 3) totals per action for this weekday — computed once,
+            // then attached to every season-level entry below.
+            val grandDurationByAction = actions.associate { it.id to grandAggregate(perActionDateMetrics[it.id].orEmpty().map { dm -> dm.duration }) }
+            val grandQuan1ByAction = actions.associate { it.id to grandAggregate(perActionDateMetrics[it.id].orEmpty().map { dm -> dm.quan1 }) }
+
             for (season in seasons) {
                 val actionStats = mutableListOf<ActionPeriodStat>()
                 for (action in actions) {
@@ -100,40 +92,52 @@ class DailyAnalysisEngine(private val db: AppDatabase) {
                         d != null && !d.before(season.start) && !d.after(season.end)
                     }
                     if (inSeason.isEmpty()) continue
+
+                    val durationAgg = aggregate(inSeason.map { it.duration }, hasTotal = true)
+                    val quan1Agg = aggregate(inSeason.map { it.quan1 }, hasTotal = true)
+                    val grandDuration = grandDurationByAction[action.id]
+                    val grandQuan1 = grandQuan1ByAction[action.id]
+
                     actionStats.add(
                         ActionPeriodStat(
                             actionId = action.id,
                             actionName = action.name,
                             time = aggregate(inSeason.map { it.time }, hasTotal = false),
-                            duration = aggregate(inSeason.map { it.duration }, hasTotal = true),
-                            quan1 = aggregate(inSeason.map { it.quan1 }, hasTotal = true)
+                            duration = attachGrand(durationAgg, grandDuration),
+                            quan1 = attachGrand(quan1Agg, grandQuan1)
                         )
                     )
                 }
                 if (actionStats.isEmpty()) continue
 
-                val generalStat = buildGeneralStat(season.label, weekdayNames[weekday - 1], actionStats, perActionDateMetrics, season.start, season.end)
+                val generalStat = buildGeneralStat(season.label, weekdayNames[weekday - 1], actionStats, perActionDateMetrics, dateSetInRange(season.start, season.end), grandDurationByAction, grandQuan1ByAction, actions)
                 results.add(generalStat)
                 log("Season '${season.label}' ${weekdayNames[weekday - 1]}: ${actionStats.size} action(s) with data.")
             }
 
-            // All-time pooled (across every season) for this weekday.
+            // All-time (level 3) entry, shown as its own labeled result too.
             val allTimeActionStats = mutableListOf<ActionPeriodStat>()
             for (action in actions) {
                 val all = perActionDateMetrics[action.id].orEmpty()
                 if (all.isEmpty()) continue
+                val durationAgg = aggregate(all.map { it.duration }, hasTotal = true)
+                val quan1Agg = aggregate(all.map { it.quan1 }, hasTotal = true)
+                val grandDuration = grandDurationByAction[action.id]
+                val grandQuan1 = grandQuan1ByAction[action.id]
+
                 allTimeActionStats.add(
                     ActionPeriodStat(
                         actionId = action.id,
                         actionName = action.name,
                         time = aggregate(all.map { it.time }, hasTotal = false),
-                        duration = aggregate(all.map { it.duration }, hasTotal = true),
-                        quan1 = aggregate(all.map { it.quan1 }, hasTotal = true)
+                        duration = attachGrand(durationAgg, grandDuration),
+                        quan1 = attachGrand(quan1Agg, grandQuan1)
                     )
                 )
             }
             if (allTimeActionStats.isNotEmpty()) {
-                val allTimeGeneral = buildGeneralStat("ALL TIME", weekdayNames[weekday - 1], allTimeActionStats, perActionDateMetrics, null, null)
+                val allDateStrings = allDates.map { dateFormat.format(it) }.toSet()
+                val allTimeGeneral = buildGeneralStat("ALL TIME", weekdayNames[weekday - 1], allTimeActionStats, perActionDateMetrics, allDateStrings, grandDurationByAction, grandQuan1ByAction, actions)
                 results.add(allTimeGeneral)
                 log("ALL TIME ${weekdayNames[weekday - 1]}: ${allTimeActionStats.size} action(s) with data, pooled across every season.")
             }
@@ -143,54 +147,76 @@ class DailyAnalysisEngine(private val db: AppDatabase) {
         return results
     }
 
-    /** Combines per-action date metrics into the General Action's own per-date metric
-     *  (Pythagorean sum for distance, plain sum for variation/totals), then aggregates
-     *  across whichever dates fall in [rangeStart, rangeEnd] (or all dates if both null). */
+    /** Computes the level-3 (grand, all-time) total/average for one action's full metric list. */
+    private fun grandAggregate(metrics: List<OccurrenceMetric>): Pair<Double?, Double?> {
+        if (metrics.isEmpty()) return null to null
+        val totals = metrics.mapNotNull { it.total }
+        if (totals.isEmpty()) return null to null
+        val sum = totals.sum()
+        return sum to (sum / totals.size)
+    }
+
+    private fun attachGrand(agg: MetricAggregate, grand: Pair<Double?, Double?>?): MetricAggregate {
+        return agg.copy(grandTotSum = grand?.first, grandAvgTot = grand?.second)
+    }
+
+    private fun dateSetInRange(start: Date, end: Date): Set<String> {
+        val dates = mutableListOf<Date>()
+        val cal = Calendar.getInstance()
+        cal.time = start
+        while (!cal.time.after(end)) {
+            dates.add(cal.time)
+            cal.add(Calendar.DAY_OF_MONTH, 1)
+        }
+        return dates.map { dateFormat.format(it) }.toSet()
+    }
+
     private fun buildGeneralStat(
         label: String,
         weekdayName: String,
         actionStats: List<ActionPeriodStat>,
         perActionDateMetrics: Map<Long, List<DateMetrics>>,
-        rangeStart: Date?,
-        rangeEnd: Date?
+        relevantDates: Set<String>,
+        grandDurationByAction: Map<Long, Pair<Double?, Double?>>,
+        grandQuan1ByAction: Map<Long, Pair<Double?, Double?>>,
+        actions: List<ActionEntity>
     ): GeneralPeriodStat {
         val actionIds = actionStats.map { it.actionId }.toSet()
         val relevantLists = perActionDateMetrics.filterKeys { it in actionIds }
+            .mapValues { (_, list) -> list.filter { it.date in relevantDates } }
 
-        val filteredLists = if (rangeStart != null && rangeEnd != null) {
-            relevantLists.mapValues { (_, list) ->
-                list.filter { dm ->
-                    val d = dateFormat.parse(dm.date)
-                    d != null && !d.before(rangeStart) && !d.after(rangeEnd)
-                }
-            }
-        } else {
-            relevantLists
-        }
-
-        val allDates = filteredLists.values.flatten().map { it.date }.toSortedSet()
+        val allDates = relevantLists.values.flatten().map { it.date }.toSortedSet()
 
         val generalTimeOccurrences = mutableListOf<OccurrenceMetric>()
         val generalDurationOccurrences = mutableListOf<OccurrenceMetric>()
         val generalQuan1Occurrences = mutableListOf<OccurrenceMetric>()
 
         for (date in allDates) {
-            val contributingTime = filteredLists.values.mapNotNull { list -> list.firstOrNull { it.date == date }?.time }
-            val contributingDuration = filteredLists.values.mapNotNull { list -> list.firstOrNull { it.date == date }?.duration }
-            val contributingQuan1 = filteredLists.values.mapNotNull { list -> list.firstOrNull { it.date == date }?.quan1 }
+            val contributingTime = relevantLists.values.mapNotNull { list -> list.firstOrNull { it.date == date }?.time }
+            val contributingDuration = relevantLists.values.mapNotNull { list -> list.firstOrNull { it.date == date }?.duration }
+            val contributingQuan1 = relevantLists.values.mapNotNull { list -> list.firstOrNull { it.date == date }?.quan1 }
 
             if (contributingTime.isNotEmpty()) generalTimeOccurrences.add(combineGeneral(date, contributingTime, hasTotal = false))
             if (contributingDuration.isNotEmpty()) generalDurationOccurrences.add(combineGeneral(date, contributingDuration, hasTotal = true))
             if (contributingQuan1.isNotEmpty()) generalQuan1Occurrences.add(combineGeneral(date, contributingQuan1, hasTotal = true))
         }
 
+        // General's own grand (all-time) total = sum of every contributing action's grand total.
+        val grandGeneralDurationSum = actionIds.mapNotNull { grandDurationByAction[it]?.first }.sumOf { it }
+        val grandGeneralDurationCount = actionIds.mapNotNull { grandDurationByAction[it] }.count { it.first != null }
+        val grandGeneralDurationAvg = if (grandGeneralDurationCount > 0) grandGeneralDurationSum / grandGeneralDurationCount else null
+
+        val grandGeneralQuan1Sum = actionIds.mapNotNull { grandQuan1ByAction[it]?.first }.sumOf { it }
+        val grandGeneralQuan1Count = actionIds.mapNotNull { grandQuan1ByAction[it] }.count { it.first != null }
+        val grandGeneralQuan1Avg = if (grandGeneralQuan1Count > 0) grandGeneralQuan1Sum / grandGeneralQuan1Count else null
+
         return GeneralPeriodStat(
             label = label,
             weekdayName = weekdayName,
             actionStats = actionStats,
             generalTime = aggregate(generalTimeOccurrences, hasTotal = false),
-            generalDuration = aggregate(generalDurationOccurrences, hasTotal = true),
-            generalQuan1 = aggregate(generalQuan1Occurrences, hasTotal = true)
+            generalDuration = aggregate(generalDurationOccurrences, hasTotal = true).copy(grandTotSum = grandGeneralDurationSum, grandAvgTot = grandGeneralDurationAvg),
+            generalQuan1 = aggregate(generalQuan1Occurrences, hasTotal = true).copy(grandTotSum = grandGeneralQuan1Sum, grandAvgTot = grandGeneralQuan1Avg)
         )
     }
 
@@ -208,7 +234,7 @@ class DailyAnalysisEngine(private val db: AppDatabase) {
 
     private fun aggregate(occurrences: List<OccurrenceMetric>, hasTotal: Boolean): MetricAggregate {
         if (occurrences.isEmpty()) {
-            return MetricAggregate(0, null, null, null, null, null, null, null)
+            return MetricAggregate(0, null, null, null, emptyList(), null, null, null, null)
         }
 
         val avgDistance = occurrences.map { it.distance }.average()
@@ -217,16 +243,17 @@ class DailyAnalysisEngine(private val db: AppDatabase) {
         val avgRate = if (rates.isEmpty()) null else rates.average()
 
         if (!hasTotal) {
-            return MetricAggregate(occurrences.size, avgDistance, avgVariation, avgRate, null, null, null, null)
+            return MetricAggregate(occurrences.size, avgDistance, avgVariation, avgRate, emptyList(), null, null, null, null)
         }
 
+        val occurrenceTotals = occurrences.mapNotNull { it.total }
         val totSum = occurrences.sumOf { it.total ?: 0.0 }
         val avgTot = totSum / occurrences.size
         val paramTotals = occurrences.mapNotNull { it.paramTotal }
         val avgParamTotal = if (paramTotals.isEmpty()) null else paramTotals.average()
         val compAvgTot = if (avgParamTotal != null && avgParamTotal > 0.0) (avgTot / avgParamTotal) * 100.0 else null
 
-        return MetricAggregate(occurrences.size, avgDistance, avgVariation, avgRate, totSum, avgTot, avgParamTotal, compAvgTot)
+        return MetricAggregate(occurrences.size, avgDistance, avgVariation, avgRate, occurrenceTotals, totSum, avgTot, avgParamTotal, compAvgTot)
     }
 
     private suspend fun buildParamCache(forms: List<AnalysisForm>): Map<ParamKey, AnalysisFormActionParam> {
@@ -286,7 +313,7 @@ class DailyAnalysisEngine(private val db: AppDatabase) {
             val durationMetric = computeOccurrenceMetric(dateStr, durationGrouped, durationParam, hasTotal = true)
             val quan1Metric = computeOccurrenceMetric(dateStr, quan1Grouped, quan1Param, hasTotal = true)
 
-            log("  [${action.name}] $dateStr: duration R=$durationGrouped P=$durationParam -> distance=${durationMetric.distance} variation=${durationMetric.variation} rate=${durationMetric.rate}")
+            log("  [${action.name}] $dateStr: duration daily total=${durationMetric.total}")
 
             result.add(DateMetrics(dateStr, timeMetric, durationMetric, quan1Metric))
         }
