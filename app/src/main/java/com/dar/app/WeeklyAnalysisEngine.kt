@@ -14,21 +14,12 @@ import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.sqrt
 
-/**
- * Weekly analysis engine. Structurally inverted from Daily: instead of fixing the weekday
- * and varying the instance (Mon1, Mon2...within a season), Weekly fixes the WEEK and varies
- * the weekday within it (Mon, Tue, ...Sun of that week). Every single day in the DSLA's
- * history gets its own occurrence, grouped by the Monday-anchored week it falls in. The
- * Grand Total naturally pools the ENTIRE DSLA history in one go, since there's no per-weekday
- * restriction at the top level — exactly as specified.
- */
 class WeeklyAnalysisEngine(private val db: AppDatabase) {
 
     var debugEnabled: Boolean = false
     val debugLog: StringBuilder = StringBuilder()
 
     private val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-    private val weekdayNames = listOf("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
 
     private fun log(line: String) {
         if (debugEnabled) debugLog.appendLine(line)
@@ -75,39 +66,65 @@ class WeeklyAnalysisEngine(private val db: AppDatabase) {
         val allDates = allDatesInRange(rangeStart, rangeEnd)
         log("Total days in DSLA span: ${allDates.size}")
 
-        // Per-action metrics for EVERY day in the DSLA's history.
         val perActionDateMetrics: Map<Long, List<DateMetrics>> = actions.associate { action ->
             action.id to computeActionDateMetrics(action, allDates, forms, paramCache, allRows)
         }
 
+        // Grand (level 3) totals per action, across the entire DSLA history — computed once,
+        // then attached to every week-level entry.
+        val grandDurationByAction = actions.associate { it.id to grandAggregate(perActionDateMetrics[it.id].orEmpty().map { it.duration }) }
+        val grandQuan1ByAction = actions.associate { it.id to grandAggregate(perActionDateMetrics[it.id].orEmpty().map { it.quan1 }) }
+
         val results = mutableListOf<GeneralPeriodStat>()
 
-        // Group into weeks (Monday-anchored).
         val weekGroups = allDates.groupBy { mondayOfWeek(it) }.toSortedMap()
         for ((weekStart, datesInWeek) in weekGroups) {
             val weekLabel = "Week of ${dateFormat.format(weekStart)}"
             val actionStats = mutableListOf<ActionPeriodStat>()
+            val dateStrings = datesInWeek.map { dateFormat.format(it) }.toSet()
+
             for (action in actions) {
-                val dateStrings = datesInWeek.map { dateFormat.format(it) }.toSet()
                 val inWeek = perActionDateMetrics[action.id].orEmpty().filter { it.date in dateStrings }
                 if (inWeek.isEmpty()) continue
-                actionStats.add(buildActionStat(action, inWeek))
+
+                val durationAgg = aggregate(inWeek.map { it.duration }, hasTotal = true)
+                val quan1Agg = aggregate(inWeek.map { it.quan1 }, hasTotal = true)
+                actionStats.add(
+                    ActionPeriodStat(
+                        actionId = action.id,
+                        actionName = action.name,
+                        time = aggregate(inWeek.map { it.time }, hasTotal = false),
+                        duration = attachGrand(durationAgg, grandDurationByAction[action.id]),
+                        quan1 = attachGrand(quan1Agg, grandQuan1ByAction[action.id])
+                    )
+                )
             }
             if (actionStats.isEmpty()) continue
-            results.add(buildGeneralStat(weekLabel, "—", actionStats, perActionDateMetrics, datesInWeek.map { dateFormat.format(it) }.toSet()))
+
+            results.add(buildGeneralStat(weekLabel, "—", actionStats, perActionDateMetrics, dateStrings, grandDurationByAction, grandQuan1ByAction))
             log("$weekLabel: ${actionStats.size} action(s) with data.")
         }
 
-        // Grand total: pool every single day across the entire DSLA history.
+        // Grand Total entry: pools every single day across the entire DSLA history.
         val allTimeActionStats = mutableListOf<ActionPeriodStat>()
         for (action in actions) {
             val all = perActionDateMetrics[action.id].orEmpty()
             if (all.isEmpty()) continue
-            allTimeActionStats.add(buildActionStat(action, all))
+            val durationAgg = aggregate(all.map { it.duration }, hasTotal = true)
+            val quan1Agg = aggregate(all.map { it.quan1 }, hasTotal = true)
+            allTimeActionStats.add(
+                ActionPeriodStat(
+                    actionId = action.id,
+                    actionName = action.name,
+                    time = aggregate(all.map { it.time }, hasTotal = false),
+                    duration = attachGrand(durationAgg, grandDurationByAction[action.id]),
+                    quan1 = attachGrand(quan1Agg, grandQuan1ByAction[action.id])
+                )
+            )
         }
         if (allTimeActionStats.isNotEmpty()) {
             val allDateStrings = allDates.map { dateFormat.format(it) }.toSet()
-            results.add(buildGeneralStat("GRAND TOTAL (entire DSLA history)", "—", allTimeActionStats, perActionDateMetrics, allDateStrings))
+            results.add(buildGeneralStat("GRAND TOTAL (entire DSLA history)", "—", allTimeActionStats, perActionDateMetrics, allDateStrings, grandDurationByAction, grandQuan1ByAction))
             log("GRAND TOTAL: ${allTimeActionStats.size} action(s) with data, pooled across the whole DSLA span.")
         }
 
@@ -115,14 +132,16 @@ class WeeklyAnalysisEngine(private val db: AppDatabase) {
         return results
     }
 
-    private fun buildActionStat(action: ActionEntity, dateMetrics: List<DateMetrics>): ActionPeriodStat {
-        return ActionPeriodStat(
-            actionId = action.id,
-            actionName = action.name,
-            time = aggregate(dateMetrics.map { it.time }, hasTotal = false),
-            duration = aggregate(dateMetrics.map { it.duration }, hasTotal = true),
-            quan1 = aggregate(dateMetrics.map { it.quan1 }, hasTotal = true)
-        )
+    private fun grandAggregate(metrics: List<OccurrenceMetric>): Pair<Double?, Double?> {
+        if (metrics.isEmpty()) return null to null
+        val totals = metrics.mapNotNull { it.total }
+        if (totals.isEmpty()) return null to null
+        val sum = totals.sum()
+        return sum to (sum / totals.size)
+    }
+
+    private fun attachGrand(agg: MetricAggregate, grand: Pair<Double?, Double?>?): MetricAggregate {
+        return agg.copy(grandTotSum = grand?.first, grandAvgTot = grand?.second)
     }
 
     private fun buildGeneralStat(
@@ -130,7 +149,9 @@ class WeeklyAnalysisEngine(private val db: AppDatabase) {
         weekdayName: String,
         actionStats: List<ActionPeriodStat>,
         perActionDateMetrics: Map<Long, List<DateMetrics>>,
-        relevantDates: Set<String>
+        relevantDates: Set<String>,
+        grandDurationByAction: Map<Long, Pair<Double?, Double?>>,
+        grandQuan1ByAction: Map<Long, Pair<Double?, Double?>>
     ): GeneralPeriodStat {
         val actionIds = actionStats.map { it.actionId }.toSet()
         val relevantLists = perActionDateMetrics.filterKeys { it in actionIds }
@@ -152,13 +173,21 @@ class WeeklyAnalysisEngine(private val db: AppDatabase) {
             if (contributingQuan1.isNotEmpty()) generalQuan1Occurrences.add(combineGeneral(date, contributingQuan1, hasTotal = true))
         }
 
+        val grandGeneralDurationSum = actionIds.mapNotNull { grandDurationByAction[it]?.first }.sumOf { it }
+        val grandGeneralDurationCount = actionIds.mapNotNull { grandDurationByAction[it] }.count { it.first != null }
+        val grandGeneralDurationAvg = if (grandGeneralDurationCount > 0) grandGeneralDurationSum / grandGeneralDurationCount else null
+
+        val grandGeneralQuan1Sum = actionIds.mapNotNull { grandQuan1ByAction[it]?.first }.sumOf { it }
+        val grandGeneralQuan1Count = actionIds.mapNotNull { grandQuan1ByAction[it] }.count { it.first != null }
+        val grandGeneralQuan1Avg = if (grandGeneralQuan1Count > 0) grandGeneralQuan1Sum / grandGeneralQuan1Count else null
+
         return GeneralPeriodStat(
             label = label,
             weekdayName = weekdayName,
             actionStats = actionStats,
             generalTime = aggregate(generalTimeOccurrences, hasTotal = false),
-            generalDuration = aggregate(generalDurationOccurrences, hasTotal = true),
-            generalQuan1 = aggregate(generalQuan1Occurrences, hasTotal = true)
+            generalDuration = aggregate(generalDurationOccurrences, hasTotal = true).copy(grandTotSum = grandGeneralDurationSum, grandAvgTot = grandGeneralDurationAvg),
+            generalQuan1 = aggregate(generalQuan1Occurrences, hasTotal = true).copy(grandTotSum = grandGeneralQuan1Sum, grandAvgTot = grandGeneralQuan1Avg)
         )
     }
 
@@ -176,7 +205,7 @@ class WeeklyAnalysisEngine(private val db: AppDatabase) {
 
     private fun aggregate(occurrences: List<OccurrenceMetric>, hasTotal: Boolean): MetricAggregate {
         if (occurrences.isEmpty()) {
-            return MetricAggregate(0, null, null, null, null, null, null, null)
+            return MetricAggregate(0, null, null, null, emptyList(), null, null, null, null)
         }
 
         val avgDistance = occurrences.map { it.distance }.average()
@@ -185,16 +214,17 @@ class WeeklyAnalysisEngine(private val db: AppDatabase) {
         val avgRate = if (rates.isEmpty()) null else rates.average()
 
         if (!hasTotal) {
-            return MetricAggregate(occurrences.size, avgDistance, avgVariation, avgRate, null, null, null, null)
+            return MetricAggregate(occurrences.size, avgDistance, avgVariation, avgRate, emptyList(), null, null, null, null)
         }
 
+        val occurrenceTotals = occurrences.mapNotNull { it.total }
         val totSum = occurrences.sumOf { it.total ?: 0.0 }
         val avgTot = totSum / occurrences.size
         val paramTotals = occurrences.mapNotNull { it.paramTotal }
         val avgParamTotal = if (paramTotals.isEmpty()) null else paramTotals.average()
         val compAvgTot = if (avgParamTotal != null && avgParamTotal > 0.0) (avgTot / avgParamTotal) * 100.0 else null
 
-        return MetricAggregate(occurrences.size, avgDistance, avgVariation, avgRate, totSum, avgTot, avgParamTotal, compAvgTot)
+        return MetricAggregate(occurrences.size, avgDistance, avgVariation, avgRate, occurrenceTotals, totSum, avgTot, avgParamTotal, compAvgTot)
     }
 
     private suspend fun buildParamCache(forms: List<AnalysisForm>): Map<ParamKey, AnalysisFormActionParam> {
@@ -227,15 +257,9 @@ class WeeklyAnalysisEngine(private val db: AppDatabase) {
                 val begin = dateFormat.parse(form.beginDate)
                 val end = form.endDate?.let { dateFormat.parse(it) }
                 begin != null && !date.before(begin) && (end == null || !date.after(end))
-            }
-            if (form == null) {
-                continue // gap — excluded, same rule as Daily
-            }
+            } ?: continue
 
-            val param = paramCache[ParamKey(form.id, action.id, weekday)]
-            if (param == null) {
-                continue // no parameters entered for this weekday — excluded
-            }
+            val param = paramCache[ParamKey(form.id, action.id, weekday)] ?: continue
 
             val rowsThatDay = allRows.filter { it.dslaId == form.dslaId && it.date == dateStr && it.actionName == action.name }
 
@@ -321,7 +345,6 @@ class WeeklyAnalysisEngine(private val db: AppDatabase) {
         return dates
     }
 
-    /** Returns the Monday on/before the given date, used as that week's identifying key. */
     private fun mondayOfWeek(date: Date): Date {
         val cal = Calendar.getInstance()
         cal.time = date
