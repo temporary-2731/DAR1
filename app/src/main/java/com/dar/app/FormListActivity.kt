@@ -12,7 +12,9 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.dar.app.data.AnalysisForm
+import com.dar.app.data.AnalysisFormActionParam
 import com.dar.app.data.AppDatabase
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -46,7 +48,95 @@ class FormListActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btn_create_form).setOnClickListener { showCreateFormDialog() }
         findViewById<Button>(R.id.btn_check_engine).setOnClickListener { openEngineCheck() }
 
-        observeForms()
+        lifecycleScope.launch {
+            backfillLinksForExistingForms()
+            observeForms()
+        }
+    }
+
+    /**
+     * One-time-per-visit sweep: for every Daily/Weekly form belonging to this General Action
+     * (regardless of which of the two period types is currently open), ensures its twin
+     * exists and has matching parameters — fixing forms created before mirroring existed.
+     */
+    private suspend fun backfillLinksForExistingForms() {
+        if (periodType != "DAILY" && periodType != "WEEKLY") return
+
+        val dailyForms = db.analysisFormDao().getFormsForOnce(generalActionId, "DAILY")
+        val weeklyForms = db.analysisFormDao().getFormsForOnce(generalActionId, "WEEKLY")
+
+        for (dailyForm in dailyForms) {
+            syncTwin(dailyForm, weeklyForms, "WEEKLY")
+        }
+        for (weeklyForm in weeklyForms) {
+            val refreshedDaily = db.analysisFormDao().getFormsForOnce(generalActionId, "DAILY")
+            syncTwin(weeklyForm, refreshedDaily, "DAILY")
+        }
+    }
+
+    private suspend fun syncTwin(sourceForm: AnalysisForm, candidateTwins: List<AnalysisForm>, twinType: String) {
+        var twin = candidateTwins.firstOrNull { it.beginDate == sourceForm.beginDate && it.endDate == sourceForm.endDate }
+
+        if (twin == null) {
+            val overlaps = candidateTwins.any { rangesOverlap(sourceForm.beginDate, sourceForm.endDate, it.beginDate, it.endDate) }
+            if (overlaps) return // don't create a twin that would collide with an unrelated existing form
+
+            val newId = db.analysisFormDao().insertForm(
+                AnalysisForm(
+                    dslaId = sourceForm.dslaId,
+                    generalActionId = sourceForm.generalActionId,
+                    periodType = twinType,
+                    beginDate = sourceForm.beginDate,
+                    endDate = sourceForm.endDate
+                )
+            )
+            twin = db.analysisFormDao().getFormById(newId) ?: return
+        }
+
+        val sourceParams = db.analysisFormDao().getParamsForFormOnce(sourceForm.id)
+        val twinParams = db.analysisFormDao().getParamsForFormOnce(twin.id)
+
+        for (sourceParam in sourceParams) {
+            val existing = twinParams.firstOrNull { it.actionId == sourceParam.actionId && it.weekday == sourceParam.weekday }
+            if (existing == null) {
+                db.analysisFormDao().insertParam(
+                    AnalysisFormActionParam(
+                        formId = twin.id,
+                        actionId = sourceParam.actionId,
+                        weekday = sourceParam.weekday,
+                        dimension = sourceParam.dimension,
+                        timeVector = sourceParam.timeVector,
+                        durationVector = sourceParam.durationVector,
+                        quan1Vector = sourceParam.quan1Vector
+                    )
+                )
+            } else if (existing.timeVector != sourceParam.timeVector ||
+                existing.durationVector != sourceParam.durationVector ||
+                existing.quan1Vector != sourceParam.quan1Vector ||
+                existing.dimension != sourceParam.dimension
+            ) {
+                db.analysisFormDao().updateParam(
+                    existing.copy(
+                        dimension = sourceParam.dimension,
+                        timeVector = sourceParam.timeVector,
+                        durationVector = sourceParam.durationVector,
+                        quan1Vector = sourceParam.quan1Vector
+                    )
+                )
+            }
+        }
+    }
+
+    private fun rangesOverlap(beginA: String, endA: String?, beginB: String, endB: String?): Boolean {
+        val sdf = SimpleDateFormat(DATE_FORMAT, Locale.getDefault())
+        val startA = sdf.parse(beginA) ?: return true
+        val finishA = endA?.let { sdf.parse(it) }
+        val startB = sdf.parse(beginB) ?: return true
+        val finishB = endB?.let { sdf.parse(it) }
+
+        val aEndsAfterBStarts = finishA == null || !finishA.before(startB)
+        val bEndsAfterAStarts = finishB == null || !finishB.before(startA)
+        return aEndsAfterBStarts && bEndsAfterAStarts
     }
 
     private fun openEngineCheck() {
@@ -164,7 +254,6 @@ class FormListActivity : AppCompatActivity() {
                         )
                     )
 
-                    // Mirror into the other Daily/Weekly period type, if it doesn't conflict.
                     val otherType = if (periodType == "DAILY") "WEEKLY" else if (periodType == "WEEKLY") "DAILY" else null
                     if (otherType != null) {
                         val otherExisting = db.analysisFormDao().getFormsForOnce(generalActionId, otherType)
