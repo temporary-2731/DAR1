@@ -37,14 +37,14 @@ class WeeklyEngineCheckActivity : AppCompatActivity() {
                 builder.appendLine(result.label)
                 for (action in result.actionStats) {
                     builder.appendLine("  [${action.actionName}] occurrences=${action.time.occurrenceCount}")
-                    builder.appendLine(metricBlock("    TIME", action.time))
-                    builder.appendLine(metricBlock("    DURATION", action.duration))
-                    builder.appendLine(metricBlock("    QUAN1", action.quan1))
+                    builder.appendLine(metricBlockNoTotal("    TIME", action.time))
+                    builder.appendLine(metricBlockWithTotals("    DURATION", action.duration))
+                    builder.appendLine(metricBlockWithTotals("    QUAN1", action.quan1))
                 }
                 builder.appendLine("  GENERAL:")
-                builder.appendLine(metricBlock("    TIME", result.generalTime))
-                builder.appendLine(metricBlock("    DURATION", result.generalDuration))
-                builder.appendLine(metricBlock("    QUAN1", result.generalQuan1))
+                builder.appendLine(metricBlockNoTotal("    TIME", result.generalTime))
+                builder.appendLine(metricBlockWithTotals("    DURATION", result.generalDuration))
+                builder.appendLine(metricBlockWithTotals("    QUAN1", result.generalQuan1))
                 builder.appendLine()
             }
             resultsView.text = builder.toString()
@@ -63,6 +63,7 @@ class WeeklyEngineCheckActivity : AppCompatActivity() {
         sb.append("      L3 all-time total=${format(m.grandTotSum)} all-time avg=${format(m.grandAvgTot)}")
         return sb.toString()
     }
+
     private fun format(value: Double?): String {
         return if (value == null) "—" else String.format(Locale.getDefault(), "%.2f", value)
     }
