@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="8dp"
+    android:layout_marginBottom="12dp"
+    android:background="@drawable/bg_highlight_card">
+
+    <TextView
+        android:id="@+id/scalar_row_action_name"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textStyle="bold"
+        android:textSize="15sp"
+        android:textColor="#000000" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/param_duration_label_scalar"
+        android:textSize="12sp"
+        android:textColor="#444444"
+        android:layout_marginTop="6dp" />
+
+    <EditText
+        android:id="@+id/edit_scalar_duration"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="numberDecimal"
+        android:textColor="#000000"
+        android:textColorHint="#999999"
+        android:hint="e.g. 3600" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/param_quan1_label_scalar"
+        android:textSize="12sp"
+        android:textColor="#444444"
+        android:layout_marginTop="6dp" />
+
+    <EditText
+        android:id="@+id/edit_scalar_quan1"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="numberDecimal"
+        android:textColor="#000000"
+        android:textColorHint="#999999"
+        android:hint="e.g. 300" />
+
+</LinearLayout>
