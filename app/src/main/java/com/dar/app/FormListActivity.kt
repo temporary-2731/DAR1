@@ -14,7 +14,6 @@ import androidx.lifecycle.lifecycleScope
 import com.dar.app.data.AnalysisForm
 import com.dar.app.data.AnalysisFormActionParam
 import com.dar.app.data.AppDatabase
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -33,6 +32,8 @@ class FormListActivity : AppCompatActivity() {
         const val EXTRA_GENERAL_ACTION_ID = "extra_general_action_id"
         const val EXTRA_PERIOD_TYPE = "extra_period_type"
         private const val DATE_FORMAT = "dd/MM/yyyy"
+        private val ALL_PERIOD_TYPES = listOf("DAILY", "WEEKLY", "MONTHLY", "YEARLY", "ALLTIME")
+        private val VECTOR_TYPES = setOf("DAILY", "WEEKLY")
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,43 +50,59 @@ class FormListActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btn_check_engine).setOnClickListener { openEngineCheck() }
 
         lifecycleScope.launch {
-            backfillLinksForExistingForms()
+            ensureAllTimeFormExists()
+            backfillFormShellsAndValues()
             observeForms()
         }
     }
 
-    /**
-     * One-time-per-visit sweep: for every Daily/Weekly form belonging to this General Action
-     * (regardless of which of the two period types is currently open), ensures its twin
-     * exists and has matching parameters — fixing forms created before mirroring existed.
-     */
-    private suspend fun backfillLinksForExistingForms() {
-        if (periodType != "DAILY" && periodType != "WEEKLY") return
-
-        val dailyForms = db.analysisFormDao().getFormsForOnce(generalActionId, "DAILY")
-        val weeklyForms = db.analysisFormDao().getFormsForOnce(generalActionId, "WEEKLY")
-
-        for (dailyForm in dailyForms) {
-            syncTwin(dailyForm, weeklyForms, "WEEKLY")
-        }
-        for (weeklyForm in weeklyForms) {
-            val refreshedDaily = db.analysisFormDao().getFormsForOnce(generalActionId, "DAILY")
-            syncTwin(weeklyForm, refreshedDaily, "DAILY")
+    /** Every General Action gets exactly one ALLTIME form automatically, matching the
+     *  DSLA's own begin/end date range. */
+    private suspend fun ensureAllTimeFormExists() {
+        val dsla = db.dslaDao().getById(dslaId) ?: return
+        val existing = db.analysisFormDao().getFormsForOnce(generalActionId, "ALLTIME")
+        if (existing.isEmpty()) {
+            db.analysisFormDao().insertForm(
+                AnalysisForm(
+                    dslaId = dslaId,
+                    generalActionId = generalActionId,
+                    periodType = "ALLTIME",
+                    beginDate = dsla.beginDate,
+                    endDate = dsla.endDate
+                )
+            )
         }
     }
 
-    private suspend fun syncTwin(sourceForm: AnalysisForm, candidateTwins: List<AnalysisForm>, twinType: String) {
-        var twin = candidateTwins.firstOrNull { it.beginDate == sourceForm.beginDate && it.endDate == sourceForm.endDate }
+    /** Ensures every form of any of the 5 types has a same-date-range shell in every OTHER
+     *  type. Daily<->Weekly also sync actual parameter values (matching vector structure);
+     *  Monthly/Yearly/All-time only get an empty shell, since their scalar parameter model
+     *  differs from Daily/Weekly's per-weekday vectors and is filled via Auto-calculate. */
+    private suspend fun backfillFormShellsAndValues() {
+        for (sourceType in ALL_PERIOD_TYPES) {
+            if (sourceType == "ALLTIME") continue // singular, handled by ensureAllTimeFormExists
+            val sourceForms = db.analysisFormDao().getFormsForOnce(generalActionId, sourceType)
+            for (sourceForm in sourceForms) {
+                for (targetType in ALL_PERIOD_TYPES) {
+                    if (targetType == sourceType || targetType == "ALLTIME") continue
+                    ensureShell(sourceForm, targetType, syncValues = sourceType in VECTOR_TYPES && targetType in VECTOR_TYPES)
+                }
+            }
+        }
+    }
+
+    private suspend fun ensureShell(sourceForm: AnalysisForm, targetType: String, syncValues: Boolean) {
+        val candidates = db.analysisFormDao().getFormsForOnce(sourceForm.generalActionId, targetType)
+        var twin = candidates.firstOrNull { it.beginDate == sourceForm.beginDate && it.endDate == sourceForm.endDate }
 
         if (twin == null) {
-            val overlaps = candidateTwins.any { rangesOverlap(sourceForm.beginDate, sourceForm.endDate, it.beginDate, it.endDate) }
-            if (overlaps) return // don't create a twin that would collide with an unrelated existing form
-
+            val overlaps = candidates.any { rangesOverlap(sourceForm.beginDate, sourceForm.endDate, it.beginDate, it.endDate) }
+            if (overlaps) return
             val newId = db.analysisFormDao().insertForm(
                 AnalysisForm(
                     dslaId = sourceForm.dslaId,
                     generalActionId = sourceForm.generalActionId,
-                    periodType = twinType,
+                    periodType = targetType,
                     beginDate = sourceForm.beginDate,
                     endDate = sourceForm.endDate
                 )
@@ -93,9 +110,10 @@ class FormListActivity : AppCompatActivity() {
             twin = db.analysisFormDao().getFormById(newId) ?: return
         }
 
+        if (!syncValues) return
+
         val sourceParams = db.analysisFormDao().getParamsForFormOnce(sourceForm.id)
         val twinParams = db.analysisFormDao().getParamsForFormOnce(twin.id)
-
         for (sourceParam in sourceParams) {
             val existing = twinParams.firstOrNull { it.actionId == sourceParam.actionId && it.weekday == sourceParam.weekday }
             if (existing == null) {
@@ -140,10 +158,15 @@ class FormListActivity : AppCompatActivity() {
     }
 
     private fun openEngineCheck() {
-        val target = if (periodType == "WEEKLY") WeeklyEngineCheckActivity::class.java else EngineCheckActivity::class.java
+        val target = when (periodType) {
+            "WEEKLY" -> WeeklyEngineCheckActivity::class.java
+            "MONTHLY", "YEARLY", "ALLTIME" -> ScalarEngineCheckActivity::class.java
+            else -> EngineCheckActivity::class.java
+        }
         val intent = Intent(this, target).apply {
             putExtra("extra_dsla_id", dslaId)
             putExtra("extra_general_action_id", generalActionId)
+            putExtra("extra_period_type", periodType)
         }
         startActivity(intent)
     }
@@ -187,11 +210,19 @@ class FormListActivity : AppCompatActivity() {
             }
 
             itemView.setOnClickListener {
-                val intent = Intent(this, WeekdaySelectActivity::class.java).apply {
-                    putExtra(WeekdaySelectActivity.EXTRA_FORM_ID, form.id)
-                    putExtra(WeekdaySelectActivity.EXTRA_GENERAL_ACTION_ID, generalActionId)
+                if (periodType in VECTOR_TYPES) {
+                    val intent = Intent(this, WeekdaySelectActivity::class.java).apply {
+                        putExtra(WeekdaySelectActivity.EXTRA_FORM_ID, form.id)
+                        putExtra(WeekdaySelectActivity.EXTRA_GENERAL_ACTION_ID, generalActionId)
+                    }
+                    startActivity(intent)
+                } else {
+                    val intent = Intent(this, PeriodFormDetailActivity::class.java).apply {
+                        putExtra(PeriodFormDetailActivity.EXTRA_FORM_ID, form.id)
+                        putExtra(PeriodFormDetailActivity.EXTRA_GENERAL_ACTION_ID, generalActionId)
+                    }
+                    startActivity(intent)
                 }
-                startActivity(intent)
             }
 
             btnDelete.setOnClickListener {
@@ -208,6 +239,7 @@ class FormListActivity : AppCompatActivity() {
             .setPositiveButton(R.string.form_delete_yes) { _, _ ->
                 lifecycleScope.launch {
                     db.analysisFormDao().deleteParamsForForm(form.id)
+                    db.analysisFormDao().deleteScalarParamsForForm(form.id)
                     db.analysisFormDao().deleteForm(form)
                 }
             }
@@ -244,7 +276,7 @@ class FormListActivity : AppCompatActivity() {
                         Toast.makeText(this@FormListActivity, R.string.form_overlap_error, Toast.LENGTH_LONG).show()
                         return@launch
                     }
-                    db.analysisFormDao().insertForm(
+                    val newId = db.analysisFormDao().insertForm(
                         AnalysisForm(
                             dslaId = dslaId,
                             generalActionId = generalActionId,
@@ -253,24 +285,13 @@ class FormListActivity : AppCompatActivity() {
                             endDate = end
                         )
                     )
-
-                    val otherType = if (periodType == "DAILY") "WEEKLY" else if (periodType == "WEEKLY") "DAILY" else null
-                    if (otherType != null) {
-                        val otherExisting = db.analysisFormDao().getFormsForOnce(generalActionId, otherType)
-                        if (!rangesOverlapAny(begin, end, otherExisting)) {
-                            db.analysisFormDao().insertForm(
-                                AnalysisForm(
-                                    dslaId = dslaId,
-                                    generalActionId = generalActionId,
-                                    periodType = otherType,
-                                    beginDate = begin,
-                                    endDate = end
-                                )
-                            )
-                            Toast.makeText(this@FormListActivity, getString(R.string.form_mirrored, otherType), Toast.LENGTH_SHORT).show()
-                        } else {
-                            Toast.makeText(this@FormListActivity, getString(R.string.form_mirror_skipped, otherType), Toast.LENGTH_SHORT).show()
+                    val newForm = db.analysisFormDao().getFormById(newId)
+                    if (newForm != null) {
+                        for (targetType in ALL_PERIOD_TYPES) {
+                            if (targetType == periodType || targetType == "ALLTIME") continue
+                            ensureShell(newForm, targetType, syncValues = periodType in VECTOR_TYPES && targetType in VECTOR_TYPES)
                         }
+                        Toast.makeText(this@FormListActivity, R.string.form_mirrored_all, Toast.LENGTH_SHORT).show()
                     }
                 }
             }
