@@ -209,5 +209,11 @@
 <string name="param_save_and_mirrored">Saved and synced to the linked form</string>
 <string name="auto_fill_no_other_forms">No other Daily/Weekly forms exist yet to copy from</string>
 <string name="auto_fill_source_empty">That form/day has no saved parameters to copy</string>
+<string name="form_mirrored_all">Matching forms created in all other period types</string>
+<string name="period_auto_calculate">Auto-calculate</string>
+<string name="period_auto_calculate_done">Auto-calculate finished</string>
+<string name="period_gap_report_title">Gaps found (no covering form) — adjust totals manually if needed:</string>
+<string name="param_duration_label_scalar">Duration (total for this period)</string>
+<string name="param_quan1_label_scalar">Quan1 (total for this period)</string>
 
 </resources>
