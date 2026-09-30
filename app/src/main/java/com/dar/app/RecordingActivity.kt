@@ -1,6 +1,5 @@
 package com.dar.app
 
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -142,7 +141,7 @@ class RecordingActivity : AppCompatActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_HIGHLIGHT && resultCode == Activity.RESULT_OK) {
+        if (requestCode == REQUEST_HIGHLIGHT && resultCode == RESULT_OK) {
             val chosenDate = data?.getStringExtra(RESULT_EXTRA_DATE)
             if (chosenDate != null) {
                 todayDate = chosenDate
@@ -182,7 +181,6 @@ class RecordingActivity : AppCompatActivity() {
         }
     }
 
-    /** "Done Editing" now runs the same full validation Save does, before allowing the toggle off. */
     private fun attemptToggleEdit() {
         if (isEditable) {
             if (!validateRows()) return
@@ -466,6 +464,8 @@ class RecordingActivity : AppCompatActivity() {
             }
         })
 
+        // Action's own focus listener owns its position tracking — buildFieldMatrix()
+        // skips this field to avoid clobbering it.
         actionField.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) {
                 currentRow = thisRowIndex
@@ -505,9 +505,6 @@ class RecordingActivity : AppCompatActivity() {
         })
 
         if (timeEnabled) {
-            // Real-time: only reject an out-of-range minute value. Ordering against the
-            // previous row is validated on focus loss below, so typing "1" toward "12"
-            // isn't blocked mid-keystroke against a larger previous-row time.
             timeField?.addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
                     if (!suppressSnapshotCapture) captureUndoSnapshot()
@@ -548,6 +545,8 @@ class RecordingActivity : AppCompatActivity() {
                 }
             })
 
+            // Time's own focus listener owns its position tracking AND blur validation —
+            // buildFieldMatrix() skips this field too, so this is never overwritten.
             timeField?.setOnFocusChangeListener { _, hasFocus ->
                 if (hasFocus) {
                     currentRow = thisRowIndex
@@ -626,8 +625,6 @@ class RecordingActivity : AppCompatActivity() {
         binding.rowContainer.addView(rowView)
     }
 
-    /** Ordering validated here (on blur), not on every keystroke, so partial typing
-     *  toward a larger value isn't rejected before it's finished. */
     private fun validateTimeOnFocusLoss(binder: RowBinding, rowIndex: Int, timeField: EditText) {
         val typed = timeField.text.toString().trim()
         if (typed.isEmpty()) {
@@ -668,6 +665,12 @@ class RecordingActivity : AppCompatActivity() {
         recomputeAllDurations()
     }
 
+    /**
+     * Fixed: Action and Time fields each keep their own dedicated focus listener (which
+     * also handles validation) — buildFieldMatrix() no longer overwrites them. Only
+     * Quan/Comment fields (which have no special validation) get the generic tracker here,
+     * so column position stays consistent for every field type across every row.
+     */
     private fun buildFieldMatrix() {
         fieldMatrix.clear()
         for ((rowIndex, binder) in rowBindings.withIndex()) {
@@ -683,6 +686,13 @@ class RecordingActivity : AppCompatActivity() {
             fieldMatrix.add(fields)
 
             for ((colIndex, field) in fields.withIndex()) {
+                if (field == binder.actionField || field == binder.timeField) continue
+                field.setOnFocusChangeListener { _, hasFocus ->
+                    if (hasFocus) {
+                        currentRow = rowIndex
+                        currentCol = colIndex
+                    }
+                }
                 field.setOnClickListener {
                     if (selectionActive) {
                         if (needsNewAnchor) {
@@ -691,6 +701,20 @@ class RecordingActivity : AppCompatActivity() {
                             extendSelection(rowIndex, colIndex)
                         }
                     }
+                }
+            }
+
+            // Action/Time still need the click-for-selection handling, just not the
+            // duplicate position-tracking that their own focus listeners already do.
+            binder.actionField.setOnClickListener {
+                if (selectionActive) {
+                    if (needsNewAnchor) beginNewAnchor(rowIndex, 0) else extendSelection(rowIndex, 0)
+                }
+            }
+            binder.timeField?.setOnClickListener {
+                val timeCol = fields.indexOf(binder.timeField)
+                if (selectionActive) {
+                    if (needsNewAnchor) beginNewAnchor(rowIndex, timeCol) else extendSelection(rowIndex, timeCol)
                 }
             }
         }
@@ -761,7 +785,6 @@ class RecordingActivity : AppCompatActivity() {
         }
     }
 
-    /** Shared by Recording's Save, History's Save/Close, and History's Done Editing. */
     private fun validateRows(): Boolean {
         for ((index, binder) in rowBindings.withIndex()) {
             val rowNumber = index + 1
