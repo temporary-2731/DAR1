@@ -15,9 +15,10 @@ import androidx.room.RoomDatabase
         SuperActionGeneralCrossRef::class,
         RecordingRow::class,
         AnalysisForm::class,
-        AnalysisFormActionParam::class
+        AnalysisFormActionParam::class,
+        AnalysisFormScalarParam::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
