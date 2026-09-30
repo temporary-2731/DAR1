@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+i<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application
@@ -32,7 +32,8 @@
         <activity android:name=".WeekdaySelectActivity" android:exported="false" />
         <activity android:name=".AutoFillPickerActivity" android:exported="false" />
         <activity android:name=".WeeklyEngineCheckActivity" android:exported="false" />
-
+        <activity android:name=".PeriodFormDetailActivity" android:exported="false" />
+        <activity android:name=".ScalarEngineCheckActivity" android:exported="false" />
     </application>
 
 </manifest>
