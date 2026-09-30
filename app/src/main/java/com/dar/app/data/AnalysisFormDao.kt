@@ -44,4 +44,19 @@ interface AnalysisFormDao {
 
     @Query("DELETE FROM analysis_form_action_param WHERE formId = :formId")
     suspend fun deleteParamsForForm(formId: Long)
+
+    @Insert
+    suspend fun insertScalarParam(param: AnalysisFormScalarParam): Long
+
+    @Update
+    suspend fun updateScalarParam(param: AnalysisFormScalarParam)
+
+    @Query("SELECT * FROM analysis_form_scalar_param WHERE formId = :formId")
+    fun getScalarParamsForForm(formId: Long): Flow<List<AnalysisFormScalarParam>>
+
+    @Query("SELECT * FROM analysis_form_scalar_param WHERE formId = :formId")
+    suspend fun getScalarParamsForFormOnce(formId: Long): List<AnalysisFormScalarParam>
+
+    @Query("DELETE FROM analysis_form_scalar_param WHERE formId = :formId")
+    suspend fun deleteScalarParamsForForm(formId: Long)
 }
